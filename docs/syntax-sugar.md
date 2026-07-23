@@ -108,16 +108,14 @@ private _text = """
 
 ---
 
-## 6. Explicit Global Variables
+## 6. Global Variables (Same as SQF)
 
-No accidental global leaks. Must declare with `global` keyword.
+Names without `_` are globals. `global` keyword is optional sugar for clarity.
 
 ```sqf
-// SQF — any bare name is global, easy to leak:
-myVar = 5;              // oops, global
-
-// SQ# — explicit only:
-global CONFIG_VERSION = "1.0";
+// Both work — choose your style:
+myVar = 5;                       // implicit global (SQF style)
+global CONFIG_VERSION = "1.0";   // explicit global (clearer intent)
 global MAX_PLAYERS = 64;
 ```
 
@@ -203,7 +201,7 @@ try {
 | `"""..."""` | N/A | Multi-line string |
 | `\n`, `\t` | `endl`, manual | Escape sequences |
 | `0xFF` | `255` | Hex literals |
-| `global X = 5` | `X = 5` (implicit global) | Explicit globals |
+| `global X = 5` | SQF implicit global | `global` keyword optional |
 | `callUnscheduled { }` | `isNil { }` | Run outside scheduler |
 | `await _h` | `waitUntil { scriptDone _h }` | Promise await |
 | `await _h timeout 3` | Manual timer + polling | Timeout await |

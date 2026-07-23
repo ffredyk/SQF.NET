@@ -211,14 +211,14 @@ params [_x, _y, _z]: Vector3;
 params [_first, ..._rest];
 ```
 
-### 🆕 NEW: Explicit Global
+### ℹ️ Global Variables (Same as SQF)
+
+Names without `_` are globals — same as SQF. `global` keyword is optional sugar for clarity.
 
 ```sqf
-// SQF: any variable without _ is global — easy to leak
-myVar = 5;    // global, pollutes missionNamespace
-
-// SQ#: must explicitly declare globals
-global CONFIG_PATH = "data/config.json";
+// Both work — same as SQF:
+myVar = 5;                       // implicit global (SQF style)
+global CONFIG_PATH = "data/config.json";  // explicit global (clearer intent)
 ```
 
 ---
@@ -284,11 +284,11 @@ _myVar, _x1, TAG_Global, _camelCase, _přežral (Unicode OK in SQ#)
    spawnOn "AI" { code };
    ```
 
-3. **`_`-prefixed variables are local.**
+3. **`_`-prefixed variables are local. Bare names are global.**
    ```sqf
    private _myVar = 5;    // local — good practice
-   myVar = 5;             // nular command or global — avoid
-   global MY_VAR = 5;     // explicit global — OK
+   myVar = 5;             // global (SQF style — OK)
+   global MY_VAR = 5;     // global (explicit — clearer intent)
    ```
 
 4. **Unary commands greedily consume the next expression.**
@@ -331,7 +331,7 @@ _myVar, _x1, TAG_Global, _camelCase, _přežral (Unicode OK in SQ#)
 | Escape sequences | None | `\n`, `\t`, `\\`, `\"`, `\'`, `\uXXXX` |
 | String interpolation | `format` only | `f"..."` + `format` |
 | Trailing comma | Error | Allowed |
-| Global variables | Implicit (`myVar = 5`) | Explicit (`global MY_VAR = 5`) |
+| Global variables | Implicit (`myVar = 5`) | Same. `global` keyword optional |
 | Modules | `#include` | `#include` preprocessor (opt-in) |
 | Multi-threading | Single scheduler | Multi-scheduler, opt-in |
 | Thread safety | N/A | Automatic, implicit |

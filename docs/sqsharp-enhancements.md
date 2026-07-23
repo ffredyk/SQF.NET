@@ -38,6 +38,10 @@ _x = "hello";           // ✅ OK — dynamic typing preserved
 _x = nil;               // Variable DELETED (SQF semantics)
 isNil _x;               // true (variable no longer exists)
 
+// Globals same as SQF — bare names without _ are global:
+score = 100;                     // global (SQF style)
+global HIGH_SCORE = 999;         // global (explicit — optional keyword)
+
 // Type errors are CLEAR:
 _x = { 1 + 2; };
 _x + 3;
