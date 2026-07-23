@@ -152,7 +152,10 @@ public class SqVm
                         var arg = Pop();
                         int cmdId = ResolveCommandId(inst.Operand);
                         if (cmdId >= 0 && _unaryCommands.TryGetValue(cmdId, out var unary))
-                            Push(unary(arg));
+                        {
+                            try { Push(unary(arg)); }
+                            catch (Exception ex) { Push(MakeError($"{ex.GetType().Name}: {ex.Message}")); }
+                        }
                         else
                             Push(SqValue.Nil);
                     }
@@ -164,7 +167,10 @@ public class SqVm
                         var left = Pop();
                         int cmdId = ResolveCommandId(inst.Operand);
                         if (cmdId >= 0 && _binaryCommands.TryGetValue(cmdId, out var binary))
-                            Push(binary(left, right));
+                        {
+                            try { Push(binary(left, right)); }
+                            catch (Exception ex) { Push(MakeError($"{ex.GetType().Name}: {ex.Message}")); }
+                        }
                         else
                             Push(SqValue.Nil);
                     }
@@ -231,7 +237,8 @@ public class SqVm
                             throw new SqTypeError($"Expected Code, got {codeVal.Type}");
 
                         var sqCode = (SqCode)codeVal.RawObject!;
-                        SqValue? arg = argCount > 0 ? Pop() : null;
+                        SqValue? arg = null;
+                        if (argCount > 0) arg = Pop();
 
                         BytecodeChunk codeChunk;
                         if (sqCode.CompiledChunk != null)
@@ -261,7 +268,8 @@ public class SqVm
                     {
                         var codeVal = Pop();
                         int argCount = inst.Operand;
-                        SqValue? arg = argCount > 0 ? Pop() : null;
+                        SqValue? arg = null;
+                        if (argCount > 0) arg = Pop();
 
                         if (_scheduler != null)
                         {
@@ -384,8 +392,18 @@ public class SqVm
         RegisterBinary("+", (a, b) => new SqValue(UnwrapNumber(a) + UnwrapNumber(b)));
         RegisterBinary("-", (a, b) => new SqValue(UnwrapNumber(a) - UnwrapNumber(b)));
         RegisterBinary("*", (a, b) => new SqValue(UnwrapNumber(a) * UnwrapNumber(b)));
-        RegisterBinary("/", (a, b) => new SqValue(UnwrapNumber(a) / UnwrapNumber(b)));
-        RegisterBinary("%", (a, b) => new SqValue(UnwrapNumber(a) % UnwrapNumber(b)));
+        RegisterBinary("/", (a, b) =>
+        {
+            double divisor = UnwrapNumber(b);
+            if (divisor == 0) throw new SqTypeError("Zero divisor");
+            return new SqValue(UnwrapNumber(a) / divisor);
+        });
+        RegisterBinary("%", (a, b) =>
+        {
+            double divisor = UnwrapNumber(b);
+            if (divisor == 0) throw new SqTypeError("Zero divisor");
+            return new SqValue(UnwrapNumber(a) % divisor);
+        });
 
         // Comparison — auto-unwrap Shared values
         RegisterBinary("==", (a, b) =>
@@ -415,11 +433,20 @@ public class SqVm
             a.PushBack(val);
             return new SqValue((double)a.Count - 1); // returns index
         });
-        RegisterBinary("select", (arr, idx) =>
+        RegisterBinary("select", (container, idx) =>
         {
-            var a = arr.AsArray();
             int i = (int)idx.AsNumberOrDefault();
-            return i >= 0 && i < a.Count ? a[i] : SqValue.Nil;
+            if (container.Type == Core.SqType.Array)
+            {
+                var a = container.AsArray();
+                return i >= 0 && i < a.Count ? a[i] : SqValue.Nil;
+            }
+            if (container.Type == Core.SqType.String)
+            {
+                var s = container.AsString();
+                return i >= 0 && i < s.Length ? new SqValue(s[i].ToString()) : SqValue.Nil;
+            }
+            return SqValue.Nil;
         });
         // Sleep / scheduling
         RegisterUnary("sleep", arg =>
@@ -533,7 +560,80 @@ public class SqVm
         });
 
         // params — handled by compiler (emits StoreLocal for each param)
-        // Runtime fallback: no-op
+        // Runtime fallback: no-op (compiler intercepts and inlines)
+
+        // Type checks (also used by compiler-emitted code for params defaults)
+        RegisterUnary("isNil", arg => new SqValue(arg.IsNil));
+
+        // spawnOn — spawn code on a named scheduler
+        // Unary: spawnOn ["SchedulerName", {code}]
+        // Binary: _args spawnOn ["SchedulerName", {code}]
+        RegisterUnary("spawnOn", arg =>
+        {
+            var arr = arg.AsArray();
+            if (arr.Count < 2) throw new SqTypeError("spawnOn requires [schedulerName, code]");
+            string schedName = arr[0].AsString();
+            var codeVal = arr[1];
+            if (codeVal.Type != SqType.Code || _scheduler == null)
+                return SqValue.Nil;
+            var childChunk = _chunk.Children[((SqCode)codeVal.RawObject!).BytecodeOffset];
+            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", null);
+            return new SqValue(SqType.ScriptHandle, handle);
+        });
+
+        RegisterBinary("spawnOn", (left, right) =>
+        {
+            var arr = right.AsArray();
+            if (arr.Count < 2) throw new SqTypeError("spawnOn requires [schedulerName, code]");
+            string schedName = arr[0].AsString();
+            var codeVal = arr[1];
+            if (codeVal.Type != SqType.Code || _scheduler == null)
+                return SqValue.Nil;
+            var childChunk = _chunk.Children[((SqCode)codeVal.RawObject!).BytecodeOffset];
+            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", new[] { left });
+            return new SqValue(SqType.ScriptHandle, handle);
+        });
+
+        // await — suspend fiber until handle resolves
+        // Unary: await _handle
+        RegisterUnary("await", arg =>
+        {
+            if (_scheduler == null || arg.RawObject == null)
+                return SqValue.Nil;
+            _scheduler.AwaitHandle(arg.RawObject, double.PositiveInfinity);
+            _state = VmState.Yielded;
+            YieldReason = arg.RawObject;
+            return SqValue.Nil;
+        });
+
+        // timeout — race handle against timer, return new handle
+        // Binary: _handle timeout 5
+        RegisterBinary("timeout", (handle, seconds) =>
+        {
+            if (_scheduler == null || handle.RawObject == null)
+                return SqValue.Nil;
+            double sec = seconds.AsNumberOrDefault();
+            var newHandle = _scheduler.ScheduleTimeout(handle.RawObject, sec);
+            return new SqValue(SqType.ScriptHandle, newHandle);
+        });
+
+        // Fiber termination
+        RegisterUnary("terminate", arg =>
+        {
+            if (_scheduler != null && arg.RawObject != null)
+            {
+                _scheduler.TerminateHandle(arg.RawObject, SqValue.Nil);
+            }
+            return SqValue.Nil;
+        });
+
+        // scriptDone — check if handle/promise is resolved
+        RegisterUnary("scriptDone", arg =>
+        {
+            if (arg.RawObject != null && _scheduler != null)
+                return new SqValue(_scheduler.IsHandleResolved(arg.RawObject));
+            return SqValue.True; // non-handle = "done"
+        });
     }
 
     // --- Command registration ---
@@ -575,7 +675,16 @@ public class SqVm
     /// <summary>Create an error value with source location.</summary>
     private SqValue MakeError(string message)
     {
+        var (line, col) = _chunk.GetDebugInfo(_ip > 0 ? _ip - 1 : 0);
         string loc = _chunk.SourceFile ?? "<script>";
-        return new SqValue(Core.SqType.Error, $"[{loc}] {message}");
+        return new SqValue(Core.SqType.Error, new SqError(message, loc, line, col));
+    }
+
+    /// <summary>Get current source location string for error reporting.</summary>
+    private string ErrorLocation()
+    {
+        var (line, col) = _chunk.GetDebugInfo(_ip > 0 ? _ip - 1 : 0);
+        string file = _chunk.SourceFile ?? "<script>";
+        return $"{file}({line},{col})";
     }
 }

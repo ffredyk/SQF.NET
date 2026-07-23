@@ -258,6 +258,29 @@ public class Parser
                 return ParseInfixBinary(left, "||", PrecOr, token);
             if (string.Equals(op, "mod", StringComparison.OrdinalIgnoreCase))
                 return ParseInfixBinary(left, "%", PrecMulDiv, token);
+
+            // call / spawn in infix position: args call {code} / args spawn {code}
+            if (string.Equals(op, "call", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(op, "spawn", StringComparison.OrdinalIgnoreCase))
+            {
+                bool isCall = string.Equals(op, "call", StringComparison.OrdinalIgnoreCase);
+                AstNode code;
+                if (Match(TokenType.CodeBlock))
+                {
+                    var body = ParseExpressionFromTokens(_tokens[_pos - 1].NestedTokens!);
+                    code = new CodeLiteralNode(
+                        body is SequenceNode s ? s.Expressions : new List<AstNode> { body },
+                        _tokens[_pos - 1].Line, _tokens[_pos - 1].Column);
+                }
+                else
+                {
+                    code = ParseExpression(precedence);
+                }
+                return isCall
+                    ? new CallNode(left, code, token.Line, token.Column)
+                    : new SpawnNode(left, code, token.Line, token.Column);
+            }
+
             var rightExpr = ParseExpression(precedence);
             return new BinaryCallNode(left, op, rightExpr, precedence, token.Line, token.Column);
         }
@@ -390,11 +413,45 @@ public class Parser
         ExpectIdentifier("do", "Expected 'do' after switch value");
         Expect(TokenType.CodeBlock, "Expected code block for switch cases");
 
-        // For now, return code literal — semantic analyzer will handle cases
-        var blockBody = ParseExpressionFromTokens(_tokens[_pos - 1].NestedTokens!);
+        // Parse case/default statements from the nested token block
+        var caseTokens = _tokens[_pos - 1].NestedTokens!;
+        var cases = ParseSwitchCases(caseTokens, line);
         Match(TokenType.Semicolon);
-        return new BinaryCallNode(value, "switch", new CodeLiteralNode(
-            new List<AstNode> { blockBody }, line, col), PrecBinary, line, col);
+        return new SwitchDoNode(value, cases, line, col);
+    }
+
+    private List<SwitchCase> ParseSwitchCases(List<Token> tokens, int parentLine)
+    {
+        var innerParser = new Parser(tokens);
+        var cases = new List<SwitchCase>();
+        while (!innerParser.IsAtEnd())
+        {
+            // Skip semicolons and commas between cases
+            innerParser.Match(TokenType.Semicolon);
+            innerParser.Match(TokenType.Comma);
+            if (innerParser.IsAtEnd()) break;
+
+            if (innerParser.MatchIdentifier("default"))
+            {
+                innerParser.Match(TokenType.Colon);
+                var body = innerParser.ParseBodyOrExpr();
+                cases.Add(new SwitchCase(null, body));
+            }
+            else if (innerParser.MatchIdentifier("case"))
+            {
+                // Parse case value at high precedence to prevent colon being consumed as binary op
+                var caseValue = innerParser.ParseExpression(PrecBinary);
+                innerParser.Match(TokenType.Colon);
+                var body = innerParser.ParseBodyOrExpr();
+                cases.Add(new SwitchCase(caseValue, body));
+            }
+            else
+            {
+                // Unexpected token in switch block — try to recover
+                innerParser.Advance();
+            }
+        }
+        return cases;
     }
 
     // --- Helpers ---
@@ -619,7 +676,7 @@ public class Parser
             || name.Equals("do", StringComparison.OrdinalIgnoreCase)
             || name.Equals("from", StringComparison.OrdinalIgnoreCase)
             || name.Equals("to", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("step", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("catch", StringComparison.OrdinalIgnoreCase);
+            || name.Equals("case", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("default", StringComparison.OrdinalIgnoreCase);
     }
 }
