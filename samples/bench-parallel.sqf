@@ -1,8 +1,7 @@
 // ============================================================
-// bench-parallel.sqf — Parallelism Benchmark
-// Measures throughput scaling with concurrent fibers.
-// SQ#: uses spawnOn with named schedulers (true parallelism)
-// Arma 3: sequential equivalent (spawnOn not available, graceful fallback)
+// bench-parallel.sqf — Parallelism Benchmark (SQ# only)
+// Measures throughput scaling with concurrent fibers across schedulers.
+// Uses spawnOn + await — SQ# extensions not available in Arma 3 SQF.
 // ============================================================
 
 // ---- Config ----
@@ -46,10 +45,8 @@ bench_sequential = {
 };
 
 // ---- Parallel (SQ# multi-scheduler) ----
-bench_parallel = {
-    if (isNil "spawnOn") exitWith { -1 };
-
-    private _schedulers = ["B_1", "B_2", "B_3", "B_4"];
+// Distributes fibers across 4 named schedulers, each on its own thread.
+bench_parallel = {    private _schedulers = ["B_1", "B_2", "B_3", "B_4"];
     private _start = diag_tickTime;
     private _handles = [];
     private _i = 0;
@@ -68,22 +65,6 @@ bench_parallel = {
     };
 
     (diag_tickTime - _start) * 1000
-};
-
-// ---- Runner ----
-bench_runner = {
-    params ["_name", "_code"];
-    private _best = 1e9;
-    private _trial = 0;
-    while { _trial < BENCH_TRIALS } do {
-        private _t = call _code;
-        if (_t > 0 && _t < _best) then { _best = _t; };
-        _trial = _trial + 1;
-    };
-    if (_best >= 1e9) exitWith { -1 };
-    diag_log format ["RESULT|%1|%2|ms", _name, _best];
-    systemChat format ["%1: %2 ms", _name, (floor (_best * 100)) / 100];
-    _best
 };
 
 // ============================================================
