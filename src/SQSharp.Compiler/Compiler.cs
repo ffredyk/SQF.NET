@@ -23,6 +23,10 @@ public class Compiler
         _localCount = 0;
         _breakJumps.Clear();
 
+        // Reserve slot 0 for _this (function argument, set by call/spawn)
+        _locals["_this"] = 0;
+        _localCount = 1;
+
         CompileNode(ast);
 
         // Implicit return of last value
@@ -33,6 +37,7 @@ public class Compiler
 
     private void CompileNode(AstNode node)
     {
+        _chunk.SetDebugPosition(node.Line, node.Column);
         switch (node)
         {
             case SequenceNode seq: CompileSequence(seq); break;
@@ -53,6 +58,10 @@ public class Compiler
             case SpawnNode s: CompileSpawn(s); break;
             case SharedDeclarationNode sd: CompileShared(sd); break;
             case TryCatchNode tc: CompileTryCatch(tc); break;
+            case ReturnNode r: CompileReturn(r); break;
+            case ForDoNode fd: CompileForDo(fd); break;
+            case SwitchDoNode sw: CompileSwitchDo(sw); break;
+            case ImportNode imp: CompileImport(imp); break;
             default:
                 throw new NotImplementedException($"Compilation of {node.NodeType} not yet implemented");
         }
@@ -123,15 +132,93 @@ public class Compiler
     // --- Operator calls ---
     private void CompileUnary(UnaryCallNode node)
     {
-        CompileNode(node.Operand);
         if (string.Equals(node.Operator, "throw", StringComparison.OrdinalIgnoreCase))
         {
+            CompileNode(node.Operand);
             _chunk.Emit(OpCode.Throw);
+        }
+        else if (string.Equals(node.Operator, "params", StringComparison.OrdinalIgnoreCase))
+        {
+            CompileParams(node);
         }
         else
         {
+            CompileNode(node.Operand);
             int cmdId = _chunk.AddGlobal(node.Operator);
             _chunk.Emit(OpCode.UnaryCall, cmdId);
+        }
+    }
+
+    /// <summary>
+    /// Compile params ["_a", ["_b", defaultValue], ...] into destructuring code.
+    /// Reads from _this (local slot 0), extracts elements by index, applies defaults,
+    /// and assigns to named local variables.
+    /// </summary>
+    private void CompileParams(UnaryCallNode node)
+    {
+        if (node.Operand is not ArrayExprNode arr)
+        {
+            // params without array — no-op, push nil
+            EmitPushNil();
+            return;
+        }
+
+        int selectCmdId = _chunk.AddGlobal("select");
+        int isNilCmdId = _chunk.AddGlobal("isNil");
+
+        for (int i = 0; i < arr.Elements.Count; i++)
+        {
+            var elem = arr.Elements[i];
+
+            // Parse param definition: "_name" or ["_name", defaultValue]
+            string varName;
+            AstNode? defaultVal = null;
+
+            if (elem is StringLiteralNode s)
+            {
+                varName = s.Value;
+            }
+            else if (elem is ArrayExprNode defArr && defArr.Elements.Count >= 1
+                && defArr.Elements[0] is StringLiteralNode nameNode)
+            {
+                varName = nameNode.Value;
+                if (defArr.Elements.Count >= 2)
+                    defaultVal = defArr.Elements[1];
+            }
+            else
+            {
+                // Malformed param — skip
+                continue;
+            }
+
+            // Validate variable name (must be local)
+            if (!varName.StartsWith("_"))
+                continue;
+
+            int slot = ResolveLocal(varName);
+
+            // Push _this array (local 0), push index, call select
+            _chunk.Emit(OpCode.PushLocal, 0); // _this
+            _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(new SqValue((double)i)));
+            _chunk.Emit(OpCode.BinaryCall, selectCmdId); // _this select i
+
+            // If default value specified, check for nil and substitute
+            if (defaultVal != null)
+            {
+                // Stack: [... val]
+                _chunk.Emit(OpCode.Dup);           // [... val val]
+                _chunk.Emit(OpCode.UnaryCall, isNilCmdId); // [... val isNil(val)]
+                int skipDefault = _chunk.EmitPlaceholder(OpCode.JumpIfFalse);
+                // val is nil — replace with default
+                _chunk.Emit(OpCode.Pop);           // [...]
+                CompileNode(defaultVal);           // [... defaultVal]
+                _chunk.PatchJump(skipDefault, _chunk.Count);
+                // Stack: [... val] (or [... defaultVal])
+            }
+
+            // Dup for expression result (params evaluates to last value), store
+            _chunk.Emit(OpCode.Dup);
+            _chunk.Emit(OpCode.StoreLocal, slot);
         }
     }
 
@@ -164,12 +251,52 @@ public class Compiler
 
             _chunk.PatchJump(jumpOver, _chunk.Count);
         }
+        else if (TryConstantFold(node, out var folded))
+        {
+            // Constant folding succeeded — emit single constant
+            _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(folded));
+        }
         else
         {
             CompileNode(node.Left);
             CompileNode(node.Right);
             int cmdId = _chunk.AddGlobal(node.Operator);
             _chunk.Emit(OpCode.BinaryCall, cmdId);
+        }
+    }
+
+    /// <summary>Try to evaluate a binary expression at compile time.</summary>
+    private static bool TryConstantFold(BinaryCallNode node, out SqValue result)
+    {
+        result = default;
+        string op = node.Operator;
+
+        // Only fold pure arithmetic on number literals
+        if (node.Left is not NumberLiteralNode ln || node.Right is not NumberLiteralNode rn)
+            return false;
+
+        double a = ln.Value;
+        double b = rn.Value;
+
+        switch (op)
+        {
+            case "+": result = new SqValue(a + b); return true;
+            case "-": result = new SqValue(a - b); return true;
+            case "*": result = new SqValue(a * b); return true;
+            case "/":
+                if (b == 0) return false;
+                result = new SqValue(a / b); return true;
+            case "%":
+                if (b == 0) return false;
+                result = new SqValue(a % b); return true;
+            case "^": result = new SqValue(Math.Pow(a, b)); return true;
+            case "==": result = new SqValue(Math.Abs(a - b) < double.Epsilon); return true;
+            case "!=": result = new SqValue(Math.Abs(a - b) >= double.Epsilon); return true;
+            case "<": result = new SqValue(a < b); return true;
+            case ">": result = new SqValue(a > b); return true;
+            case "<=": result = new SqValue(a <= b); return true;
+            case ">=": result = new SqValue(a >= b); return true;
+            default: return false;
         }
     }
 
@@ -399,6 +526,135 @@ public class Compiler
                 _chunk.Emit(OpCode.Pop); // discard intermediate results
         }
         // Last expression value stays on stack
+    }
+
+    // --- return ---
+    private void CompileReturn(ReturnNode node)
+    {
+        if (node.Value != null)
+            CompileNode(node.Value);
+        else
+            EmitPushNil();
+        _chunk.Emit(OpCode.Ret);
+    }
+
+    // --- for [{init},{cond},{step}] do {body} ---
+    private void CompileForDo(ForDoNode node)
+    {
+        // Init
+        CompileNode(node.Init);
+        _chunk.Emit(OpCode.Pop); // discard init result
+
+        int loopStart = _chunk.Count;
+
+        // Condition
+        CompileNode(node.Condition);
+        int exitJump = _chunk.EmitPlaceholder(OpCode.JumpIfFalse);
+
+        // Body
+        _breakJumps.Push(-1);
+        CompileBody(node.Body);
+        _chunk.Emit(OpCode.Pop); // discard body result
+
+        // Step
+        CompileNode(node.Step);
+        _chunk.Emit(OpCode.Pop); // discard step result
+
+        // Loop back
+        _chunk.Emit(OpCode.Jump, loopStart);
+        _chunk.PatchJump(exitJump, _chunk.Count);
+
+        _breakJumps.Pop();
+
+        // for returns nil
+        _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(SqValue.Nil));
+    }
+
+    // --- switch / case / default ---
+    private void CompileSwitchDo(SwitchDoNode node)
+    {
+        // Evaluate switch value once, store in temp local
+        CompileNode(node.Value);
+        int valueSlot = _localCount++;
+        _chunk.Emit(OpCode.StoreLocal, valueSlot);
+        _chunk.Emit(OpCode.Pop); // discard assignment dup
+
+        // Build jump table: for each case, emit condition check + conditional jump to body
+        var caseJumps = new List<int>(); // jump-to-body placeholders
+        var endJumps = new List<int>();  // jump-past-body placeholders (after each body)
+
+        int defaultBodyJump = -1;
+
+        foreach (var sc in node.Cases)
+        {
+            if (sc.CaseValue == null)
+            {
+                // default — will be placed after all cases
+                continue;
+            }
+
+            // Push switch value, push case value, compare ==
+            _chunk.Emit(OpCode.PushLocal, valueSlot);
+            CompileNode(sc.CaseValue);
+            int eqCmdId = _chunk.AddGlobal("==");
+            _chunk.Emit(OpCode.BinaryCall, eqCmdId);
+
+            // JumpIfTrue to this case's body
+            int jumpToBody = _chunk.EmitPlaceholder(OpCode.JumpIfTrue);
+            caseJumps.Add(jumpToBody);
+        }
+
+        // If no case matched, jump to default (or past all cases)
+        int jumpToDefault = _chunk.EmitPlaceholder(OpCode.Jump);
+
+        // Emit case bodies
+        int caseIdx = 0;
+        var bodyStartAddrs = new List<int>();
+        foreach (var sc in node.Cases)
+        {
+            if (sc.CaseValue == null)
+            {
+                // default body — record address
+                defaultBodyJump = _chunk.Count;
+            }
+            else
+            {
+                // Patch the JumpIfTrue for this case
+                _chunk.PatchJump(caseJumps[caseIdx], _chunk.Count);
+                caseIdx++;
+            }
+
+            bodyStartAddrs.Add(_chunk.Count);
+            CompileBody(sc.Body);
+
+            // Jump past remaining cases after executing a body
+            int jumpPast = _chunk.EmitPlaceholder(OpCode.Jump);
+            endJumps.Add(jumpPast);
+        }
+
+        // Patch default jump
+        if (defaultBodyJump >= 0)
+            _chunk.PatchJump(jumpToDefault, defaultBodyJump);
+        else
+            _chunk.PatchJump(jumpToDefault, _chunk.Count);
+
+        // If no default and no case matched, push nil
+        if (defaultBodyJump < 0)
+            _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(SqValue.Nil));
+
+        // Patch all end jumps
+        int afterSwitch = _chunk.Count;
+        foreach (var j in endJumps)
+            _chunk.PatchJump(j, afterSwitch);
+    }
+
+    // --- import ---
+    private void CompileImport(ImportNode node)
+    {
+        // import "path" is a no-op at compile time.
+        // The host handles file resolution and module loading.
+        // Emit a nop by pushing nil.
+        EmitPushNil();
     }
 
     // --- Helpers ---

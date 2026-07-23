@@ -275,10 +275,15 @@ public class SqHost
         RegisterBinary("/", (a, b) =>
         {
             double divisor = UnwrapSharedNumber(b);
-            if (divisor == 0) return new SqValue(double.NaN);
+            if (divisor == 0) throw new SqTypeError("Zero divisor");
             return new SqValue(UnwrapSharedNumber(a) / divisor);
         }, 7);
-        RegisterBinary("%", (a, b) => new SqValue(UnwrapSharedNumber(a) % UnwrapSharedNumber(b)), 7);
+        RegisterBinary("%", (a, b) =>
+        {
+            double divisor = UnwrapSharedNumber(b);
+            if (divisor == 0) throw new SqTypeError("Zero divisor");
+            return new SqValue(UnwrapSharedNumber(a) % divisor);
+        }, 7);
 
         // Comparison (auto-unwrap Shared values)
         RegisterBinary("==", (a, b) =>
@@ -460,11 +465,6 @@ public class SqHost
         RegisterUnary("trim", arg => new SqValue(arg.AsString().Trim()), ThreadSafety.ReadOnly);
 
         // Math
-        RegisterUnary("abs", arg => new SqValue(Math.Abs(arg.AsNumberOrDefault())));
-        RegisterUnary("floor", arg => new SqValue(Math.Floor(arg.AsNumberOrDefault())));
-        RegisterUnary("ceil", arg => new SqValue(Math.Ceiling(arg.AsNumberOrDefault())));
-        RegisterUnary("round", arg => new SqValue(Math.Round(arg.AsNumberOrDefault())));
-        RegisterUnary("sqrt", arg => new SqValue(Math.Sqrt(Math.Max(0, arg.AsNumberOrDefault()))));
         RegisterBinary("min", (a, b) => new SqValue(Math.Min(UnwrapSharedNumber(a), UnwrapSharedNumber(b))), 6);
         RegisterBinary("max", (a, b) => new SqValue(Math.Max(UnwrapSharedNumber(a), UnwrapSharedNumber(b))), 6);
 
@@ -502,6 +502,64 @@ public class SqHost
         {
             double max = UnwrapSharedNumber(arg);
             lock (_rng) return new SqValue(_rng.NextDouble() * max);
+        });
+
+        // Random selection
+        RegisterUnary("selectRandom", arg =>
+        {
+            var arr = arg.AsArray();
+            if (arr.Count == 0) return SqValue.Nil;
+            lock (_rng) return arr[_rng.Next(arr.Count)];
+        }, ThreadSafety.ReadOnly);
+
+        RegisterUnary("selectRandomWeighted", arg =>
+        {
+            // Expects array of [value, weight] pairs: [[val1, w1], [val2, w2], ...]
+            var arr = arg.AsArray();
+            if (arr.Count == 0) return SqValue.Nil;
+
+            // Sum weights
+            double totalWeight = 0;
+            var pairs = new (SqValue value, double weight)[arr.Count];
+            for (int i = 0; i < arr.Count; i++)
+            {
+                var pair = arr[i].AsArray();
+                if (pair.Count < 2) continue;
+                double w = pair[1].AsNumberOrDefault();
+                if (w < 0) w = 0;
+                totalWeight += w;
+                pairs[i] = (pair[0], w);
+            }
+
+            if (totalWeight <= 0) return SqValue.Nil;
+
+            double roll;
+            lock (_rng) roll = _rng.NextDouble() * totalWeight;
+
+            double cumulative = 0;
+            for (int i = 0; i < pairs.Length; i++)
+            {
+                cumulative += pairs[i].weight;
+                if (roll <= cumulative)
+                    return pairs[i].value;
+            }
+
+            // Fallback: return last valid value
+            for (int i = pairs.Length - 1; i >= 0; i--)
+                if (pairs[i].weight > 0)
+                    return pairs[i].value;
+
+            return SqValue.Nil;
+        });
+
+        // HashMap constructors
+        RegisterUnary("createHashMapFromArray", arg =>
+        {
+            var arr = arg.AsArray();
+            var map = new SqHashMap();
+            for (int i = 0; i + 1 < arr.Count; i += 2)
+                map.Set(arr[i], arr[i + 1]);
+            return new SqValue(SqType.HashMap, map);
         });
 
         // Runtime compilation
@@ -614,6 +672,28 @@ public class SqHost
 
         // Output (generic — host defines OnPrint handler)
         RegisterUnary("print", arg => { OnPrint?.Invoke(arg.ToString() ?? "nil"); return SqValue.Nil; });
+
+        // Script handle / fiber management
+        RegisterUnary("terminate", arg =>
+        {
+            if (arg.Type == SqType.ScriptHandle && arg.RawObject is ScriptHandle handle)
+            {
+                handle.Resolve(SqValue.Nil);
+            }
+            return SqValue.Nil;
+        });
+        RegisterUnary("scriptDone", arg =>
+        {
+            if (arg.Type == SqType.ScriptHandle && arg.RawObject is ScriptHandle handle)
+                return new SqValue(handle.IsResolved);
+            return SqValue.True;
+        });
+        RegisterUnary("isNull", arg =>
+        {
+            if (arg.Type == SqType.ScriptHandle && arg.RawObject is ScriptHandle handle)
+                return new SqValue(handle.IsResolved);
+            return new SqValue(arg.IsNil);
+        });
     }
 
     /// <summary>
