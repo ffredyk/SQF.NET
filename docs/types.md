@@ -61,7 +61,7 @@ SQF defines "magic types" — type-system abstractions, not real runtime types.
 |---|---|---|
 | **Anything** | Union type | Any real type OR Nothing. nil may still fail at runtime. |
 | **Nothing** | Type of nil | "No value." Return type of void procedures. |
-| **Void** | Undefined variable | Variable that doesn't exist / was undefine'd. |
+| **Void** | Undefined variable | Variable that doesn't exist (was assigned nil or never declared). |
 | **HashMapKey** | Virtual compound | Valid HashMap key types: Number, Boolean, String, Code, Side, Config, Namespace, NaN, Array. |
 
 ## nil / Nothing / Void — Critical Distinction
@@ -76,11 +76,13 @@ _myVar = nil;       // _myVar becomes Void — DELETED
 isNil "_myVar";     // → true
 hint str nil;       // ERROR — nil kills expressions
 
-// SQ# (fixed): nil is storable
-_myVar = nil;       // _myVar holds nil. Variable EXISTS.
-isNil _myVar;       // → true (value is nil)
-isDefined _myVar;   // → true (variable exists)
-undefine _myVar;    // NOW deleted
+// SQ# (SQF-compatible): nil DELETES variables
+_myVar = nil;       // _myVar becomes Void — DELETED (matches SQF)
+isNil "_myVar";     // → true
+isNil _myVar;       // → true (compile-time variable check)
+// nil is still a valid VALUE — works in arrays, comparisons, returns:
+private _arr = [1, nil, 3];
+if (_arr select 1 == nil) then { ... }; // true
 ```
 
 ## HashMapKey — SQ# Mapping

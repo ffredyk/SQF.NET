@@ -17,7 +17,7 @@ Every variable is `Anything`. `nil` deletes variables. Undefined variables silen
 
 | Type | C# Storage | SQF Equivalent |
 |---|---|---|
-| `Nothing` | — | `nil` (but storable!) |
+| `Nothing` | — | `nil` (deletes variables — SQF behavior) |
 | `Boolean` | `double` (0.0/1.0) | `true`/`false` |
 | `Number` | `double` (IEEE 754) | `1`, `3.14`, `-2.5e10` |
 | `String` | `string` (interned) | `"hello"`, `'hello'` |
@@ -35,8 +35,8 @@ Every variable is `Anything`. `nil` deletes variables. Undefined variables silen
 // SQ# type safety:
 private _x = 42;
 _x = "hello";           // ✅ OK — dynamic typing preserved
-_x = nil;               // ✅ OK — nil is a value, not deletion
-isNil _x;               // false (nil IS a value)
+_x = nil;               // Variable DELETED (SQF semantics)
+isNil _x;               // true (variable no longer exists)
 
 // Type errors are CLEAR:
 _x = { 1 + 2; };
@@ -46,7 +46,7 @@ _x + 3;
 ```
 
 **Key differences**:
-- `nil` is a storable value — doesn't delete variables
+- `nil` assignment deletes variables (matches SQF behavior)
 - Undefined variables throw `SqUndefinedVariableError` — not silent
 - Type mismatch throws `SqTypeError` with clear message
 - No implicit `0 == false` equality (though truthiness is SQF-compatible)
@@ -326,7 +326,7 @@ Full-featured `SqArray` and `SqHashMap`:
 | HashMap (O(1) lookup) | `createHashMap` | ✅ (2.14+) |
 | HashMap: array keys | ❌ Rejected (mutable keys unsafe) | ⚠️ Silent bugs |
 | Ownership tracking | ✅ Cross-scheduler protection | ❌ |
-| `nil` in arrays | ✅ Storable | ❌ Deletes element |
+| `nil` in arrays | ✅ Storable as value | ❌ Deletes element |
 
 📖 Full guide: [arrays.md](arrays.md)
 
@@ -512,7 +512,7 @@ Some SQF features are deliberately omitted or changed:
 
 | SQF Feature | SQ# Status | Reason |
 |---|---|---|
-| `nil` deletes variables | ❌ Changed | `nil` is a storable value. Use `undefine` to delete. |
+| `nil` deletes variables | ✅ Matches SQF | `nil` assignment deletes variables. `isNil` checks if undefined. |
 | `_x` auto-available in `forEach` | ⚠️ Different | Use `params` or explicit `_x` binding |
 | `forEachMember` / `forEachMemberAgent` | 🔜 Planned | Team-based iteration (StdLib) |
 | `configFile` / `missionConfigFile` | ❌ Not applicable | Config is an Arma concept. Host-defined equivalent. |

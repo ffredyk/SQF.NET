@@ -31,4 +31,6 @@ public enum OpCode : byte
     TryBegin,
     TryEnd,
     MakeShared,  // pop value, create SqSharedValue, push back
+    IsNilLocal,  // push true if local slot is undefined/nil
+    IsNilGlobal, // push true if global name is undefined
 }

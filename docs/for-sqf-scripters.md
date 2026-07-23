@@ -20,21 +20,21 @@ _count = count _arr;                 _count = count _arr;
 
 ## What Changed
 
-### ✅ Fixed: nil Can Be Stored
+### ℹ️ nil Deletes Variables (SQF Behavior Preserved)
 
-In SQF, `_var = nil` **deletes** the variable. This is confusing and error-prone.
-In SQ#, `nil` is a normal value you can store.
+In SQF, `_var = nil` **deletes** the variable. SQ# keeps this behavior.
+`nil` is still a valid value for array elements, function returns, and comparisons — just not storable in variables.
 
 ```sqf
-// SQF — BAD:
+// SQF — works the same in SQ#:
 _myVar = nil;       // Variable DELETED. _myVar no longer exists.
-isNil "_myVar";     // true (because it's gone)
+isNil "_myVar";     // true (string form — looks up by name)
+isNil _myVar;       // true (variable form — compile-time check)
 
-// SQ# — GOOD:
-_myVar = nil;       // Variable holds nil value. Still exists.
-isNil _myVar;       // true (value is nil)
-isDefined _myVar;   // true (variable still exists)
-undefine _myVar;    // NOW it's deleted (explicit)
+// nil as a value still works:
+private _arr = [1, nil, 3];    // nil in arrays is fine
+private _val = _arr select 1;  // nil → variable deleted
+if (_arr select 1 == nil) then { ... }; // comparison works
 ```
 
 ### ✅ Fixed: Undefined Variables Are Errors

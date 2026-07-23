@@ -274,7 +274,7 @@ _a = expr   → [expr bytecode], STORE_LOCAL <_a>, DUP
 - String interpolation, escape sequences, verbatim/multi-line strings
 - `try`/`catch`, structured errors
 - `==` is strict (`isEqualTo` semantics)
-- `nil` is storable (not deletive), `undefine` for deletion
+- `nil` deletes variables (SQF behavior), `isNil` checks if undefined
 - `await`, promise combinators, `spawnOn [scheduler,code]` / `spawnParallel {code}`
 - Implicit thread safety, `Freeze`/`Channel`/`Shared`
 - Regular expressions, `#pragma` directives
@@ -286,7 +286,6 @@ _a = expr   → [expr bytecode], STORE_LOCAL <_a>, DUP
 - Arma-specific types (unless host registers)
 - Legacy `comment` operator
 - SQS syntax
-- nil-deletes-variable behavior
 - Single-quote preprocessor parsing
 - `spawn` non-deterministic order
 - Nested `#ifdef` limitation

@@ -205,9 +205,10 @@ public class ExecutionTests
     public void Params_SimpleNames_AssignsFromThis()
     {
         // params reads from _this (local slot 0)
-        // In bare VM without call, _this is nil → select returns nil → isNil → no defaults → nil
-        var result = Run("params [\"_a\", \"_b\"]; _a");
-        Assert.True(result.IsNil);
+        // In bare VM without call, _this is nil → select returns nil → stores nil → deletes variable
+        // Accessing undefined var throws. Use isNil to check.
+        var result = Run("params [\"_a\", \"_b\"]; isNil _a");
+        Assert.True(result.AsBool());
     }
 
     [Fact]

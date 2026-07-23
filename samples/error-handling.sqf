@@ -65,15 +65,15 @@ try {
 };
 
 // ---- Nil safety ----
-// SQ#: nil is storable, comparisons work:
-private _val = nil;
-if (_val == nil) then {
-    print "Value is nil — still defined";  // true
+// SQ#: nil deletes variables (SQF-compatible behavior):
+private _val = 42;
+_val = nil;                           // Variable DELETED
+private _isNilCheck = isNil _val;     // true (variable is gone)
+// isNil also checks values directly:
+private _arr = [1, nil, 3];
+if (_arr select 1 == nil) then {
+    print "Array element is nil";      // works — nil is still a value, just can't be stored in variables
 };
-// isDefined checks if variable EXISTS (not if value is nil):
-private _exists = isDefined _val;         // true
-// undefine _val;                         // NOW deleted
-// isDefined _val would be false
 
 // ---- Array safety (SQ# vs SQF) ----
 private _arr = [1, 2, 3];

@@ -21,7 +21,7 @@ _playerData set ["position", [125.5, 3400.2, 0]];
 private _name = _playerData get "name";          // "Foxhound"
 private _rank = _playerData get "rank";          // "Captain"
 private _score = _playerData get "score";         // 8500
-private _missing = _playerData get "nonexist";    // nil
+private _missing = _playerData get "nonexist";    // nil → variable deleted (SQF semantics)
 
 // get with default:
 // private _def = _playerData getOrDefault ["nonexist", "unknown"];

@@ -249,6 +249,6 @@ These are explicitly OUT of scope. The hosting project implements them.
 
 1. **SQ# is embeddable.** Any .NET app can host it. No dependencies on Unity, Godot, or any engine.
 2. **Host owns the world.** SQ# provides the scripting engine. Objects, networking, UI — host defines them via registered commands.
-3. **SQF compatibility is a goal, not a constraint.** Where SQF is broken (nil, undefined vars, precedence), SQ# fixes it. Where SQF is Arma-specific (config, vehicles, sides), the host implements equivalents.
+3. **SQF compatibility is a goal, not a constraint.** Where SQF is broken (undefined vars, precedence), SQ# fixes it. Where SQF is Arma-specific (config, vehicles, sides), the host implements equivalents. SQ# preserves SQF's nil-deletes-variable semantics.
 4. **Thread safety is built-in, not bolted-on.** Ownership, freeze/thaw, channels, shared — all in the runtime. No opt-in flags.
 5. **Tooling matters.** A language without a debugger is half a language. DAP support is a priority.

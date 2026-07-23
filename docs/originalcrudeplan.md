@@ -309,30 +309,28 @@ if (undefinedVar == undefinedVar) then { ... }; // ERROR
 
 Detect via `isNil "varName"` (string argument — looks up by name).
 
-#### SQ# Approach: Simplified nil/Void
+#### SQ# Approach: SQF-Compatible nil/Void
 
-SQF's nil/Nothing/Void system is confusing and error-prone. SQ# cleans it up:
+SQ# preserves SQF's nil semantics — nil assignment deletes variables. This is the expected behavior for SQF scripters:
 
 | Concept | SQ# Approach |
 |---|---|
-| `nil` literal | Storable value of type `Nothing`. `_x = nil;` → `_x` holds nil, NOT deleted. |
-| `Nothing` type | Proper unit type. One value: `nil`. Variables CAN hold it. |
-| Undefined variables | **Error** at compile time (strict mode) or runtime `UndefinedVariableError`. |
-| Unset a variable | Use `undefine _x;` statement (explicit, not implicit via nil assignment). |
-| `isNil` | Takes expression, not string: `isNil _x` → true if nil. `isDefined _x` → true if variable exists. |
-| `isNil "varName"` | Legacy string form supported in compat mode only. |
+| `nil` literal | Value of type `Nothing`. `_x = nil;` → `_x` DELETED (matches SQF). |
+| `Nothing` type | Proper unit type. One value: `nil`. Cannot be stored in variables. |
+| Undefined variables | **Error** at runtime `UndefinedVariableError` when accessed directly. |
+| Unset a variable | Assign `nil` to it. `_x = nil;` deletes `_x`. |
+| `isNil` | Compile-time for variables: `isNil _x` → true if var undefined. String form: `isNil "varName"` checks by name. Value form: `isNil expr` checks if value is nil. |
 
 ```sqf
-// SQ# clean behavior:
+// SQ# SQF-compatible behavior:
 _myVar = 42;       // Number = 42
-_myVar = nil;      // _myVar holds nil (Nothing type) — VARIABLE STILL EXISTS
-isNil _myVar;      // → true (value is nil)
-isDefined _myVar;  // → true (variable exists)
+_myVar = nil;      // Variable DELETED (SQF semantics)
+isNil _myVar;      // → true (variable gone — compile-time check)
+isNil "_myVar";    // → true (string form — looks up global)
 
-undefine _myVar;   // NOW variable is removed
-isDefined _myVar;  // → false
-
-// Compile error in strict mode:
+// nil is still a value — works in arrays and comparisons:
+private _arr = [1, nil, 3];
+if (_arr select 1 == nil) then { ... }; // true
 _undefined;        // ERROR: Undefined variable '_undefined'
 ```
 

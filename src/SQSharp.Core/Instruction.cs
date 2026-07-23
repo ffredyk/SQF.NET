@@ -44,6 +44,9 @@ public readonly struct Instruction
             OpCode.Throw => "THROW",
             OpCode.TryBegin => $"TRY_BEGIN {Operand}",
             OpCode.TryEnd => "TRY_END",
+            OpCode.MakeShared => $"MAKE_SHARED",
+            OpCode.IsNilLocal => $"ISNIL_LOCAL {Operand}",
+            OpCode.IsNilGlobal => $"ISNIL_GLOBAL {Operand}",
             _ => $"{OpCode} {Operand}"
         };
     }

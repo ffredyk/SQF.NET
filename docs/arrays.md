@@ -127,7 +127,7 @@ reverse _arr;      // in-place
 | **select OOB** | -1→error, count→nil, count+1→error | `_arr[idx]` → nil for any OOB |
 | **Index rounding** | Banker's rounding | Float→banker's (compat). int→exact. |
 | **set OOB** | Auto-resize | Kept. `_arr[i] = v` sugar. |
-| **nil in arrays** | nil = deleted variable | `nil` storable. `[1, nil, 3]` valid. |
+| **nil in arrays** | nil = deleted variable | `nil` as value OK. `[1, nil, 3]` valid. Storing nil in variable deletes it. |
 | **Copy depth** | `+_arr` deep | `copy` shallow, `deepCopy` recursive, `+_arr` = deepCopy alias. |
 | **Subtract all** | `_arr - [x]` all | Same. `removeFirst x` for single. |
 | **Trailing comma** | Error | Allowed: `[1, 2, 3,]` |

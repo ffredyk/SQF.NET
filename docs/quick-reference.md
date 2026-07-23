@@ -208,8 +208,9 @@ try {
 ## Type Checks
 
 ```sqf
-isNil _var;                    // true if nil
-isDefined _var;                // true if variable exists (SQ#)
+isNil _var;                    // true if var undefined (compile-time check)
+isNil "_var";                  // true if global undefined (string form)
+isNil expr;                    // true if value is nil (runtime check)
 typeName _val;                 // "number", "string", "array", etc.
 isFrozen _arr;                 // true if immutable (SQ#)
 ```

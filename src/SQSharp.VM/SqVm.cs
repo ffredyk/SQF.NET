@@ -31,6 +31,9 @@ public class SqVm
     // Locals
     private readonly SqValue[] _locals;
 
+    // Track which local slots are defined (nil assignment deletes)
+    private readonly bool[] _localDefined;
+
     // Globals (shared reference from scheduler)
     private readonly Dictionary<string, SqValue> _globals;
 
@@ -65,6 +68,10 @@ public class SqVm
         _sp = 0;
         _ip = 0;
         _locals = new SqValue[chunk.LocalCount];
+        _localDefined = new bool[chunk.LocalCount];
+        // Slot 0 is _this — always defined (set by call/spawn, default nil for bare VM)
+        if (chunk.LocalCount > 0)
+            _localDefined[0] = true;
         _globals = globals ?? new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
         _scheduler = scheduler;
         _schedulerId = scheduler?.SchedulerId ?? 0;
@@ -104,11 +111,30 @@ public class SqVm
                     break;
 
                 case OpCode.PushLocal:
-                    Push(_locals[inst.Operand]);
+                    {
+                        int slot = inst.Operand;
+                        if (!_localDefined[slot])
+                            throw new SqUndefinedVariableError($"local slot {slot}");
+                        Push(_locals[slot]);
+                    }
                     break;
 
                 case OpCode.StoreLocal:
-                    _locals[inst.Operand] = Pop();
+                    {
+                        var val = Pop();
+                        int slot = inst.Operand;
+                        if (val.IsNil)
+                        {
+                            // nil assignment deletes the variable (SQF behavior)
+                            _localDefined[slot] = false;
+                            _locals[slot] = SqValue.Nil;
+                        }
+                        else
+                        {
+                            _localDefined[slot] = true;
+                            _locals[slot] = val;
+                        }
+                    }
                     break;
 
                 case OpCode.PushGlobal:
@@ -125,7 +151,7 @@ public class SqVm
                             if (cmdId >= 0 && _nularCommands.TryGetValue(cmdId, out var nular))
                                 Push(nular());
                             else
-                                Push(SqValue.Nil);
+                                throw new SqUndefinedVariableError(name);
                         }
                     }
                     break;
@@ -133,7 +159,16 @@ public class SqVm
                 case OpCode.StoreGlobal:
                     {
                         string name = _chunk.GlobalNames[inst.Operand];
-                        _globals[name] = Pop();
+                        var val = Pop();
+                        if (val.IsNil)
+                        {
+                            // nil assignment deletes the global variable (SQF behavior)
+                            _globals.Remove(name);
+                        }
+                        else
+                        {
+                            _globals[name] = val;
+                        }
                     }
                     break;
 
@@ -212,6 +247,23 @@ public class SqVm
                         else
                             shared = new SqSharedValue(0.0); // default for nil
                         Push(new SqValue(Core.SqType.Shared, shared));
+                    }
+                    break;
+
+                case OpCode.IsNilLocal:
+                    {
+                        int slot = inst.Operand;
+                        Push(new SqValue(!_localDefined[slot]));
+                    }
+                    break;
+
+                case OpCode.IsNilGlobal:
+                    {
+                        string name = _chunk.GlobalNames[inst.Operand];
+                        int cmdId = ResolveCommandId(inst.Operand);
+                        bool exists = _globals.ContainsKey(name)
+                            || (cmdId >= 0 && _nularCommands.ContainsKey(cmdId));
+                        Push(new SqValue(!exists));
                     }
                     break;
 
@@ -563,7 +615,23 @@ public class SqVm
         // Runtime fallback: no-op (compiler intercepts and inlines)
 
         // Type checks (also used by compiler-emitted code for params defaults)
-        RegisterUnary("isNil", arg => new SqValue(arg.IsNil));
+        RegisterUnary("isNil", arg =>
+        {
+            // If arg is a string, look up global variable by name (SQF compat)
+            if (arg.IsString)
+            {
+                string varName = arg.AsString();
+                // Check if a global with this name exists
+                if (_globals.TryGetValue(varName, out _))
+                    return SqValue.False; // variable exists, not nil
+                // Also check if it's a registered nular command
+                if (_cmdNameToId.TryGetValue(varName, out _))
+                    return SqValue.False; // command exists, not nil
+                return SqValue.True; // undefined
+            }
+            // Otherwise check if the value itself is nil
+            return new SqValue(arg.IsNil);
+        });
 
         // spawnOn — spawn code on a named scheduler
         // Unary: spawnOn ["SchedulerName", {code}]
@@ -669,7 +737,10 @@ public class SqVm
     public void SetLocal(int slot, SqValue value)
     {
         if ((uint)slot < (uint)_locals.Length)
+        {
             _locals[slot] = value;
+            _localDefined[slot] = true;
+        }
     }
 
     /// <summary>Create an error value with source location.</summary>

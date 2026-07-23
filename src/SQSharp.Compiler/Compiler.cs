@@ -141,6 +141,21 @@ public class Compiler
         {
             CompileParams(node);
         }
+        else if (string.Equals(node.Operator, "isNil", StringComparison.OrdinalIgnoreCase)
+            && node.Operand is VariableNode varNode)
+        {
+            // isNil _varName → compile-time check (avoids evaluating undefined variable)
+            if (varNode.IsLocal)
+            {
+                int slot = ResolveLocal(varNode.Name);
+                _chunk.Emit(OpCode.IsNilLocal, slot);
+            }
+            else
+            {
+                int nameIdx = _chunk.AddGlobal(varNode.Name);
+                _chunk.Emit(OpCode.IsNilGlobal, nameIdx);
+            }
+        }
         else
         {
             CompileNode(node.Operand);

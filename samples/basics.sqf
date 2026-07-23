@@ -15,7 +15,8 @@ private _off = false;
 
 private _name = "hello";         // Double-quoted string
 private _code = 'SQ#';           // Single-quoted string (same as double)
-private _nil = nil;              // Nothing type (storable! unlike SQF)
+private _nil = nil;              // Variable DELETED (nil assignment = SQF behavior)
+// Unlike old SQ# docs: nil is NOT storable — it deletes the variable.
 
 // ---- Verbatim & Multi-line strings (SQ# additions) ----
 private _path = @"C:\Users\Name\Documents";   // No escape processing
@@ -82,16 +83,15 @@ private _minVal = 5 min 10;     // 5
 private _maxVal = 5 max 10;     // 10
 
 // ---- Type checking ----
-private _isNil = isNil _nil;             // true (SQ#: expression, not string)
-private _isDef = isDefined _local;       // true
-private _typeStr = typeName _num;        // "NUMBER" (string)
-
-// ---- nil is storable (SQ# fix) ----
+// isNil checks if variable is undefined (SQF behavior):
 private _myVar = 42;
-_myVar = nil;                   // _myVar holds nil. Variable STILL EXISTS.
-private _stillThere = isDefined _myVar;  // true
-undefine _myVar;                 // NOW it's gone (explicit)
-// isDefined _myVar — would be false now
+private _isNil1 = isNil _myVar;          // false (variable exists)
+_myVar = nil;                            // Variable DELETED (SQF semantics)
+private _isNil2 = isNil _myVar;          // true (variable was deleted)
+// isNil also works on values directly (e.g., for array elements):
+private _arr = [1, nil, 3];
+private _isNil3 = isNil (_arr select 1); // true (array element is nil)
+private _typeStr = typeName _num;        // "NUMBER" (string)
 
 // ---- print / systemChat / hint ----
 print "Basics sample loaded!";   // Always available (→ host.OnPrint)

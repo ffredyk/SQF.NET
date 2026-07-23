@@ -469,7 +469,23 @@ public class SqHost
         RegisterBinary("max", (a, b) => new SqValue(Math.Max(UnwrapSharedNumber(a), UnwrapSharedNumber(b))), 6);
 
         // Type checks
-        RegisterUnary("isNil", arg => new SqValue(arg.IsNil));
+        RegisterUnary("isNil", arg =>
+        {
+            // If arg is a string, look up global variable by name (SQF compat)
+            if (arg.IsString)
+            {
+                string varName = arg.AsString();
+                // Check if a global with this name exists (locals resolved at compile time)
+                if (_globals.TryGetValue(varName, out _))
+                    return SqValue.False; // variable exists, not nil
+                // Also check if it's a registered nular command
+                if (_nularCommands.ContainsKey(varName))
+                    return SqValue.False; // command exists, not nil
+                return SqValue.True; // undefined
+            }
+            // Otherwise check if the value itself is nil
+            return new SqValue(arg.IsNil);
+        });
         RegisterUnary("str", arg => new SqValue(arg.ToString() ?? "nil"));
         RegisterUnary("format", arg =>
         {
