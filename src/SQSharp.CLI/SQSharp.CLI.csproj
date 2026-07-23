@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SQSharp.Core\SQSharp.Core.csproj" />
+    <ProjectReference Include="..\SQSharp.Language\SQSharp.Language.csproj" />
+    <ProjectReference Include="..\SQSharp.Compiler\SQSharp.Compiler.csproj" />
+    <ProjectReference Include="..\SQSharp.VM\SQSharp.VM.csproj" />
+    <ProjectReference Include="..\SQSharp.Scheduler\SQSharp.Scheduler.csproj" />
+    <ProjectReference Include="..\SQSharp.Host\SQSharp.Host.csproj" />
+    <ProjectReference Include="..\SQSharp.StdLib\SQSharp.StdLib.csproj" />
+    <ProjectReference Include="..\SQSharp.Preprocessor\SQSharp.Preprocessor.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

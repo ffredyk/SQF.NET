@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SQSharp.CLI/SQSharp.CLI.csproj" />
+    <Project Path="src/SQSharp.Compiler/SQSharp.Compiler.csproj" />
+    <Project Path="src/SQSharp.Core/SQSharp.Core.csproj" />
+    <Project Path="src/SQSharp.Host/SQSharp.Host.csproj" />
+    <Project Path="src/SQSharp.Language/SQSharp.Language.csproj" />
+    <Project Path="src/SQSharp.Preprocessor/SQSharp.Preprocessor.csproj" />
+    <Project Path="src/SQSharp.Scheduler/SQSharp.Scheduler.csproj" />
+    <Project Path="src/SQSharp.StdLib/SQSharp.StdLib.csproj" />
+    <Project Path="src/SQSharp.VM/SQSharp.VM.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SQSharp.Compiler.Tests/SQSharp.Compiler.Tests.csproj" />
+    <Project Path="tests/SQSharp.Core.Tests/SQSharp.Core.Tests.csproj" />
+    <Project Path="tests/SQSharp.Language.Tests/SQSharp.Language.Tests.csproj" />
+    <Project Path="tests/SQSharp.VM.Tests/SQSharp.VM.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SQSharp.Core\SQSharp.Core.csproj" />
+    <ProjectReference Include="..\SQSharp.Scheduler\SQSharp.Scheduler.csproj" />
+    <ProjectReference Include="..\SQSharp.VM\SQSharp.VM.csproj" />
+    <ProjectReference Include="..\SQSharp.Language\SQSharp.Language.csproj" />
+    <ProjectReference Include="..\SQSharp.Compiler\SQSharp.Compiler.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
