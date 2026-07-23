@@ -80,6 +80,29 @@ Arma 3 has none of these. The single-thread model makes them unnecessary — but
 
 ---
 
+## Parallelism Benchmark (Measured)
+
+The `bench-parallel.sqf` script measures throughput scaling with concurrent fibers:
+
+**Workload**: 8 fibers × 40,000 trig iterations (`sin × cos + sqrt`) per fiber = 320,000 math calls total.
+
+| Engine | Mode | Time | vs SQ# seq |
+|---|---|---|---|
+| **SQ#** | sequential (1 thread) | 1,556 ms | 1.0× |
+| **SQ#** | parallel (4 threads) | **418 ms** | **3.7× faster** |
+| **Arma 3** | loading screen (bare engine) | 475 ms | 3.3× faster |
+| **Arma 3** | in-game (physics+render+AI) | 2,040 ms | 1.3× slower |
+
+### Fair Comparison Note
+
+**SQ# currently runs with zero game overhead** — no rendering, no physics simulation, no AI, no networking. This is equivalent to Arma's loading screen environment, not in-game. The Arma loading screen result (475 ms) represents Arma's pure SQF execution speed — its JIT compiler running at full capacity.
+
+When Arma is in-game, scripts compete with everything else for CPU time on the single simulation thread. The 2,040 ms result is the **real-world performance** of SQF in a running mission. SQ# sidesteps this entirely — scripts get dedicated scheduler threads that aren't preempted by rendering or physics.
+
+**Bottom line**: SQ# on 4 threads (418 ms) matches Arma's best-case single-thread speed (475 ms). In a future engine integration where SQ# also carries game overhead, the multi-threading advantage would still apply — each scheduler thread independently serves its workload, unaffected by other schedulers' load.
+
+---
+
 ## Benchmark Results
 
 All tests run on the same machine (Windows 11, .NET 10, Release-optimized build). Arma 3 results from identical `.sqf` scripts executed in-mission.
