@@ -8,37 +8,164 @@ scheduling model to any .NET application — game engines, tools, servers, or CL
 
 ## Status
 
-� **Alpha** — Lexer, parser, compiler, VM, and CLI working. Scheduler and StdLib in progress.
+**v0.7** — Language complete. Lexer, Pratt parser, bytecode compiler, stack VM,
+cooperative fiber scheduler, multi-scheduler thread safety, CLI tooling, and
+100+ commands all working. 122 tests passing. See [Scope & Roadmap](docs/scope-and-roadmap.md).
+
+## Quick Start
+
+```bash
+# Install (.NET 10 required)
+git clone https://github.com/ffredyk/SQF.NET
+cd SQF.NET
+dotnet build
+
+# Run a script
+dotnet run --project src/SQSharp.CLI -- run samples/basics.sqf
+
+# Open REPL
+dotnet run --project src/SQSharp.CLI -- repl
+
+# Compile to binary .sqfc
+dotnet run --project src/SQSharp.CLI -- compile samples/basics.sqf --binary -o basics.sqfc
+
+# Run tests
+dotnet test
+```
 
 ## Quick Example
 
 ```sqf
-// SQ# script — familiar SQF syntax, modern enhancements
-private _units = allUnits select { alive _x && side _x == west };
-private _count = count _units;
+// Variables and arithmetic
+private _x = 10;
+private _y = _x * 3 + 5;       // 35
 
-systemChat f"Found {_count} friendly units";
+// Arrays and commands
+private _arr = [1, 2, 3, 4, 5];
+_arr pushBack 6;                // append — returns index
+private _third = _arr select 2; // 3
+private _len = count _arr;      // 6
 
-// Async with promises (array-on-right: [scheduler, code])
-private _handle = spawnOn ["AI", {
-    private _result = heavyPathfinding(_this);
-    return _result;
-}];
+// Control flow
+if (_x > 5) then {
+    systemChat "x is big";
+} else {
+    systemChat "x is small";
+};
 
-// Await with timeout (array form for multi-params)
-private _path = await [_handle, 5];
+// Loops
+for "_i" from 0 to 4 do {
+    _arr select _i;
+};
+
+// Switch
+switch (_x) do {
+    case 10: { systemChat "ten" };
+    default { systemChat "other" };
+};
+
+// Error handling
+try {
+    _result = 100 / 0;
+} catch {
+    systemChat str _exception;
+};
+
+// Functions with params and defaults
+private _sum = [10, 20] call {
+    params ["_a", ["_b", 99]];  // _b defaults to 99
+    _a + _b                     // returns 30
+};
+
+// Async concurrency
+private _handle = spawn {
+    sleep 2.5;
+    systemChat "done";
+};
+private _result = await _handle timeout 5;
+
+// Thread-safe shared state
+shared _counter = 0;
+_counter add 1;                 // atomic increment
+private _val = get _counter;
+
+// HashMap
+private _map = createHashMapFromArray ["key1", 100, "key2", 200];
+_map set ["key3", 300];
+private _v = _map get "key1";   // 100
 ```
 
 ## Key Features
 
 - **SQF-compatible syntax** — familiar `call`/`spawn`/`execVM`, code-as-data, operator precedence
-- **Modern enhancements** — string interpolation, type annotations, try/catch, module imports
-- **Bytecode VM** — stack-based, fast execution, binary `.sqfc` serialization
-- **Hybrid scheduling** — cooperative fibers with time budget, multi-scheduler, real threading
+- **Modern enhancements** — try/catch/throw, switch/case, params with defaults, lazy `&&`/`||`, HashMap
+- **Bytecode VM** — 25 opcodes, stack-based, constant folding, binary `.sqfc` serialization
+- **Cooperative scheduling** — fibers with time budget, multi-scheduler architecture
 - **Implicit thread safety** — scheduler-local globals, ownership tracking, freeze/channel/shared primitives
 - **Extensible host API** — register custom commands by arity, precedence, and thread safety level
-- **Promise system** — Script Handles as async/await promises with combinators (All/Race/Any)
-- **NuGet packages** — embed in any .NET app, CLI tool for running scripts standalone
+- **Promise system** — Script Handles as async/await with `timeout` combinator
+- **Embeddable** — single library, host in any .NET 10 application
+
+## Current Capabilities (v0.7)
+
+### Language
+
+| Feature | Details |
+|---|---|
+| Variables | `_local`, `global`, assignment as expression |
+| Literals | Number, string, boolean, nil, array `[a,b]`, code `{...}` |
+| Operators | `+` `-` `*` `/` `%` `^`, `==` `!=` `<` `>` `<=` `>=` |
+| Logic | `&&` `||` `!` with lazy short-circuit on code blocks |
+| Control flow | `if/then/else`, `while`, `for..from..to`, `for [{},{},{}]` |
+| Switch | `switch/case/default` with expression matching |
+| Error handling | `try/catch/throw` with full error propagation + stack traces |
+| Functions | `call`/`spawn` with args, `params` with defaults, `return` |
+| Comments | `// line`, `/* block */` |
+
+### Runtime Commands
+
+| Category | Commands |
+|---|---|
+| Math | `sin` `cos` `tan` `asin` `acos` `atan2` `sqrt` `abs` `exp` `log` `floor` `ceil` `round` `pow` `random` |
+| Array | `pushBack` `select` `deleteAt` `deleteRange` `resize` `append` `reverse` `sort` `find` `in` `count` |
+| String | `parseNumber` `toArray` `toString` `splitString` `joinString` `toLower` `toUpper` `trim` `find` |
+| HashMap | `createHashMap` `createHashMapFromArray` `get` `set` |
+| Random | `random` `selectRandom` `selectRandomWeighted` |
+| Type | `isNil` `str` `format` `typeName` `compile` |
+| Diagnostics | `diag_tickTime` `hint` `systemChat` `diag_log` |
+
+### Concurrency & Thread Safety
+
+| Feature | Details |
+|---|---|
+| Scheduling | Cooperative fibers with 3ms time budget per `Tick()` |
+| Multi-scheduler | `spawnOn` cross-scheduler spawning, `sendTo` array transfer |
+| Async | `await`, `sleep`, `timeout`, `terminate` |
+| Ownership | `scheduler`, `isSchedulerLocal`, automatic tracking |
+| Immutable sharing | `freeze`/`thaw` — zero-copy read-only sharing across schedulers |
+| Atomic | `shared` — CAS-based synchronized variables (`add`, `sub`, `get`, `set`, `compareSwap`) |
+| Channels | SPSC message passing between schedulers |
+| Scheduler query | `allSchedulers`, `schedulerName`, `schedulerExists`, `schedulerStats`, `fiberCount` |
+
+### CLI Tooling
+
+| Command | Description |
+|---|---|
+| `sqf lex <file>` | Token dump |
+| `sqf parse <file>` | AST tree |
+| `sqf compile <file> [--binary]` | Bytecode listing or `.sqfc` binary output |
+| `sqf run <file>` | Execute script |
+| `sqf repl` | Interactive read-eval-print loop |
+| `sqf serialize <file>` | Run + dump binary serialized result |
+| `sqf deserialize <file>` | Read `.sqfc` binary back |
+
+### Host API
+
+| Feature | Details |
+|---|---|
+| `SqHost` | Central API — parse, compile, spawn, state save/load |
+| Command registration | By arity (nular/unary/binary), precedence, and thread safety level |
+| Host types | `RegisterType<T>()` for host-defined object types |
 
 ## Documentation
 
@@ -64,18 +191,54 @@ private _path = await [_handle, 5];
 ```
 SQF.NET/
 ├── src/
-│   ├── SQSharp.Core/            # SqValue, SqType, core abstractions
-│   ├── SQSharp.Language/        # Lexer, Pratt Parser, AST
-│   ├── SQSharp.Compiler/        # AST → IR → Bytecode
-│   ├── SQSharp.VM/              # Stack VM
-│   ├── SQSharp.Scheduler/       # Fiber engine, cooperative scheduling
-│   ├── SQSharp.Host/            # Extensible host API
+│   ├── SQSharp.Core/            # SqValue, SqType, SqArray, SqHashMap, SqCode, SqError, bytecode types
+│   ├── SQSharp.Language/        # Lexer, Pratt Parser (20+ AST nodes), Token types
+│   ├── SQSharp.Compiler/        # AST → Bytecode (single-pass recursive walk)
+│   ├── SQSharp.VM/              # Stack VM (25 opcodes), builtin commands, ISqScheduler
+│   ├── SQSharp.Scheduler/       # SqFiber, SqScheduler, ScriptHandle, cooperative scheduling
+│   ├── SQSharp.Host/            # SqHost — central host API, command registration, save/load
 │   ├── SQSharp.StdLib/          # Standard library commands
-│   ├── SQSharp.CLI/             # dotnet tool
-│   └── SQSharp.Preprocessor/    # Legacy preprocessor (opt-in)
+│   ├── SQSharp.CLI/             # CLI: lex, parse, compile, run, repl, serialize, deserialize
+│   └── SQSharp.Preprocessor/    # Legacy SQF preprocessor (opt-in)
 ├── tests/
-├── samples/
-└── docs/
+│   ├── SQSharp.Core.Tests/      # SqValue, SqArray unit tests
+│   ├── SQSharp.Language.Tests/  # Lexer, Parser unit tests
+│   ├── SQSharp.Compiler.Tests/  # Compiler unit tests
+│   └── SQSharp.VM.Tests/        # Execution tests (122 total, 0 failures)
+├── samples/                     # 14 .sqf example scripts + 2 host embedding samples
+└── docs/                        # 14 documentation guides
+```
+
+## Architecture
+
+```
+Source Code
+    │
+    ▼
+┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Lexer   │───▶│  Parser  │───▶│ Compiler │
+│ (tokens) │    │  (AST)   │    │(bytecode)│
+└──────────┘    └──────────┘    └──────────┘
+                                      │
+                                      ▼
+                                ┌──────────┐
+                                │  SqVm    │
+                                │ (stack)  │
+                                └──────────┘
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    ▼                 ▼                 ▼
+              ┌──────────┐    ┌──────────┐    ┌──────────┐
+              │Scheduler │    │Scheduler │    │Scheduler │
+              │  "Main"  │    │  "AI"    │    │ "Physics"│
+              └──────────┘    └──────────┘    └──────────┘
+                    │                 │                 │
+                    └─────────────────┼─────────────────┘
+                                      │
+                              ┌───────────────┐
+                              │    SqHost     │
+                              │ (your .NET app)│
+                              └───────────────┘
 ```
 
 ## Decisions
@@ -85,8 +248,8 @@ SQF.NET/
 | Scope | Core language + extensible host API |
 | Compatibility | Modernized dialect (not drop-in SQF compatible) |
 | Execution | Stack-based bytecode VM |
-| Scheduling | Hybrid: cooperative fibers + multi-thread schedulers |
-| Integration | CLI tool + NuGet packages |
+| Scheduling | Cooperative fibers + multi-thread schedulers |
+| Integration | CLI tool + embeddable library |
 | .NET Target | .NET 10 |
 | Serialization | Binary `.sqfc` format |
 | Unity | Design for it, build later |
@@ -104,8 +267,13 @@ Design aligned with official Bohemia Interactive documentation:
 
 TBD
 
-## Milestones
+## Roadmap
 
-- **M1**: Full language + host demo (lexer, parser, compiler, VM, scheduler, 50+ commands)
-- **M2**: Polish + tooling (.sqfc serialization, legacy preprocessor, DAP debugger, VS Code extension)
-- **M3**: Ecosystem (Unity package, docs site, project templates)
+| Version | Focus | Key Items |
+|---|---|---|
+| **v0.7** ✅ | Language complete | Full language, scheduler, 100+ commands, CLI, thread safety |
+| **v0.8** | Compiler & runtime | Dead code elimination, preprocessor, range `..`, fiber priority/timeout |
+| **v0.9** | Tooling & polish | DAP debugger, VS Code extension, `--watch`, string interpolation, `callExtension` |
+| **v1.0** | Stable | NuGet packages, API docs, benchmarks, compatibility guarantee |
+
+See [Scope & Roadmap](docs/scope-and-roadmap.md) for full details.
