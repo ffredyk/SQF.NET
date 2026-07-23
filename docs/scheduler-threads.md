@@ -109,8 +109,9 @@ COUNTER = COUNTER + 1;  // COUNTER == 1
 // Scheduler "AI" (different thread):
 COUNTER = COUNTER + 1;  // COUNTER == 1 (its own copy!)
 
-// Cross-scheduler sharing requires Shared<T>:
-global SHARED_COUNTER = Shared create 0;
+// Cross-scheduler sharing requires shared:
+shared SHARED_COUNTER = 0;
+// Read: get SHARED_COUNTER → number; arithmetic auto-unwraps: SHARED_COUNTER + 0
 ```
 
 This eliminates 90% of potential data races. Scripter who never uses `spawnOn` never encounters shared state.
@@ -133,11 +134,11 @@ if (_channel canReceive) then { ... }; // non-blocking check
 ```
 Lock-free SPSC queue. Two-way pattern via response channel. No deadlocks possible.
 
-#### 3. Shared<T> — CAS-Based Mutable
+#### 3. Shared — CAS-Based Mutable
 ```sqf
-private _counter = Shared create 0;
+shared _counter = 0;
 _counter add 1;                   // atomic (Interlocked.Increment)
-private _current = _counter get;  // atomic read
+private _current = get _counter;  // atomic read (or _counter + 0)
 _counter compareSwap [42, 99];    // CAS
 ```
 For counters, flags, status. No locks. `Interlocked`/`Volatile` under the hood.
@@ -178,7 +179,7 @@ Single scheduler (99% of scripts):
   ✅ Everything just works.
 
 Multi-scheduler (opt-in):
-  ✅ spawnOn "AI" { ... } — run on AI thread
+  ✅ spawnOn ["AI", { ... }] — run on AI thread
   ✅ Freeze data → immutable, safe sharing
   ✅ Channel → message passing, lock-free
   ✅ Shared<T> → counters/flags, CAS-based
@@ -200,7 +201,7 @@ NEVER:
 | `sendTo(scheduler)` | Transfer ownership |
 | `copy` | New owned copy |
 | `Channel create` / `send` / `receive` / `canReceive` | Message passing |
-| `Shared create` / `get` / `set` / `add` / `sub` / `compareSwap` | CAS-based sync |
+| `shared` / `add` / `sub` / `compareSwap` | CAS-based sync |
 | `isFrozen` | Check immutability |
 | `owner` | Get owning scheduler |
 

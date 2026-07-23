@@ -67,7 +67,7 @@ Fiber binding:
 | Continuation scheduling | Same scheduler | Any scheduler / thread pool |
 | Combinators | None | `PromiseAll`, `PromiseRace`, `PromiseAny` |
 | Timeout | `waitUntil [h, t]` | `.Timeout(seconds)` → exception |
-| Unscheduled await | ❌ | ✅ (suspends fiber, not thread) |
+  Unscheduled await | ❌ (must use continueWith) | ✅ `await _handle` in any fiber (suspends fiber, not thread) |
 | Progress | ❌ | `IProgress<T>` |
 
 ### Promise Combinators
@@ -105,19 +105,22 @@ var result = await vm.Spawn(codeBlock)
 ### SQ# Script Syntax
 
 ```sqf
-// Spawn on specific scheduler
-private _handle = spawnOn "AI" { heavyComputation() };
+// Spawn on specific scheduler (array on right: [scheduler, code])
+private _handle = spawnOn ["AI", { heavyComputation() }];
+
+// With arguments (binary: args spawnOn [scheduler, code])
+private _handle = _args spawnOn ["AI", { params ["_x"]; process(_x); }];
 
 // Thread pool for CPU work
 private _handle = spawnParallel { expensiveMath() };
 
 // Await (fiber suspends cooperatively)
-private _result = await _handle;
-private _result = await _handle timeout 5;
+private _result = await _handle;           // simple await
+private _result = await [_handle, 5];      // with timeout (array form)
 
 // Continuation (non-blocking)
 _handle continueWith { systemChat str _this; };
-_handle continueWithOn "Main" { updateUI(_this); };
+_handle continueWithOn ["Main", { updateUI(_this); }];
 
 // Combinators
 private _allDone = PromiseAll [
@@ -146,11 +149,11 @@ _handle onProgress { hint format ["%1%%", _this]; };
 ### Scheduler-Aware Spawning
 
 ```sqf
-_h1 = spawn { ... };                     // current scheduler
-_h2 = spawnOn "AI" { ... };              // named scheduler
-_h3 = spawnOn "Main" { ... };            // main/UI thread
-_h4 = spawnOn "IO" { ... };              // I/O scheduler
-_h5 = spawnParallel { heavyMath() };     // .NET thread pool
+_h1 = spawn { ... };                          // current scheduler
+_h2 = spawnOn ["AI", { ... }];                // named scheduler
+_h3 = spawnOn ["Main", { ... }];              // main/UI thread
+_h4 = spawnOn ["IO", { ... }];                // I/O scheduler
+_h5 = spawnParallel { heavyMath() };          // .NET thread pool
 // ⚠️ spawnParallel: host commands may be unavailable
 // Use for pure computation only.
 ```
@@ -163,14 +166,14 @@ _h5 = spawnParallel { heavyMath() };     // .NET thread pool
 | `isNull` | `Handle → Boolean` | Null/resolved? (Arma 3 compat) |
 | `terminate` | `Handle, [Value] → Nothing` | Resolve + kill. Optional value. |
 | `continueWith` | `Handle, Code → Handle` | Add continuation. Chainable. |
-| `continueWithOn` | `Handle, Scheduler, Code → Handle` | Continuation on scheduler (SQ#) |
+| `continueWithOn` | `Handle, [Scheduler, Code] → Handle` | Continuation on scheduler (SQ#) |
 | `waitUntil` | `Handle → Value` | Block until resolved. |
 | `waitUntil` | `[Handle, Number] → Value` | Block with timeout. |
-| `await` | `Handle → Value` | SQ# keyword — cleaner `waitUntil`. |
+| `await` | `Handle → Value` or `[Handle, Number] → Value` | SQ# keyword. Array form for timeout. |
 | `PromiseAll` | `[Handle...] → [Value...]` | All resolve (SQ#) |
 | `PromiseRace` | `[Handle...] → Value` | First wins (SQ#) |
 | `PromiseAny` | `[Handle...] → Value` | First success (SQ#) |
-| `spawnOn` | `Scheduler, Code → Handle` | Named scheduler (SQ#) |
+| `spawnOn` | `[Scheduler, Code] → Handle` | Named scheduler. Right = array [name, code] (SQ#) |
 | `spawnParallel` | `Code → Handle` | Thread pool (SQ#) |
 | `progress` | `Number → Nothing` | Report progress (SQ#) |
 | `onProgress` | `Handle, Code → Handle` | Progress callback (SQ#) |

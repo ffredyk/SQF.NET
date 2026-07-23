@@ -8,7 +8,7 @@ scheduling model to any .NET application — game engines, tools, servers, or CL
 
 ## Status
 
-🟡 **Planning Phase** — Design complete. Implementation not started.
+� **Alpha** — Lexer, parser, compiler, VM, and CLI working. Scheduler and StdLib in progress.
 
 ## Quick Example
 
@@ -17,16 +17,16 @@ scheduling model to any .NET application — game engines, tools, servers, or CL
 private _units = allUnits select { alive _x && side _x == west };
 private _count = count _units;
 
-f"Found {_count} friendly units" call systemChat;
+systemChat f"Found {_count} friendly units";
 
-// Async with promises
-private _handle = spawnOn "AI" {
+// Async with promises (array-on-right: [scheduler, code])
+private _handle = spawnOn ["AI", {
     private _result = heavyPathfinding(_this);
     return _result;
-};
+}];
 
-// Await result (fiber suspends cooperatively, not thread)
-private _path = await _handle timeout 5;
+// Await with timeout (array form for multi-params)
+private _path = await [_handle, 5];
 ```
 
 ## Key Features
@@ -42,14 +42,22 @@ private _path = await _handle timeout 5;
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [Implementation Plan](docs/plan.md) | Full architecture, decisions, milestones |
-| [Language Specification](docs/language-spec.md) | Syntax, operators, precedence, control structures |
-| [Type System](docs/types.md) | Data types, magic types, nil/void semantics |
-| [Scheduler & Thread Safety](docs/scheduler-threads.md) | Execution model, fiber scheduling, implicit safety |
-| [Promise System](docs/promises.md) | Script handles, async/await, combinators |
-| [Array Semantics](docs/arrays.md) | Array behavior, quirks, SQ# fixes |
+| Document | For | Description |
+|---|---|---|
+| [SQ# Enhancements](docs/sqsharp-enhancements.md) | 👥 Everyone | **Master list** — everything SQ# brings over SQF |
+| [Scope & Roadmap](docs/scope-and-roadmap.md) | 👥 Everyone | What SQ# owns, what the host owns, what's coming |
+| [SQ# for SQF Scripters](docs/for-sqf-scripters.md) | 🎮 SQF users | Migration guide — what changed, how to script |
+| [SQ# for .NET Developers](docs/for-dotnet-devs.md) | 💻 .NET devs | Embedding guide, NuGet, host API |
+| [Quick Reference](docs/quick-reference.md) | 📋 Everyone | One-page language reference card |
+| [Multithreading](docs/multithreading.md) | 🎮 SQF users | Fibers, schedulers, channels, shared, freeze/thaw |
+| [Multiplayer](docs/multiplayer.md) | 🎮 SQF users | Locality, remoteExec, publicVariable, JIP, patterns |
+| [Code Optimisation](docs/optimisation.md) | 🎮 SQF users | Performance tips, do/don't, scheduling |
+| [Language Specification](docs/language-spec.md) | 🔧 Contributors | Syntax, operators, precedence, control structures |
+| [Type System](docs/types.md) | 🔧 Contributors | Data types, magic types, nil/void semantics |
+| [Scheduler & Thread Safety](docs/scheduler-threads.md) | 🔧 Contributors | Execution model, fiber scheduling, implicit safety |
+| [Promise System](docs/promises.md) | 🔧 Contributors | Script handles, async/await, combinators |
+| [Array Semantics](docs/arrays.md) | 🔧 Contributors | Array behavior, quirks, SQ# fixes |
+| [Implementation Plan](docs/plan.md) | 🔧 Contributors | Full architecture, decisions, milestones |
 
 ## Project Structure
 

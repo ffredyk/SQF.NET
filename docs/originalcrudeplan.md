@@ -626,7 +626,7 @@ Source: https://community.bistudio.com/wiki/Script_Handle
 
 ### SQF Promise Handles (Arma 3 2.22+)
 
-Script Handles double as **Promises** (futures). Every spawned script is a promise that resolves when the script exits.
+Script Handles double as **Promises**. Every spawned script is a promise that resolves when the script exits.
 
 | Operation | Syntax | Description |
 |---|---|---|
@@ -805,7 +805,7 @@ _h5 = spawnParallel { heavyMath() };
 // Host commands may not be available depending on host thread-safety.
 // Use for pure computation only.
 
-// Remote (future: cross-process, networked)
+// Remote (🏠 host: cross-process networking)
 // _h6 = spawnRemote "worker-node" { ... };
 ```
 
@@ -1025,7 +1025,7 @@ Under the hood: Channels use lock-free SPSC (single-producer single-consumer) qu
 
 ```sqf
 // Shared counter between schedulers
-private _counter = Shared create 0;  // Shared<Number>, initial value 0
+shared _counter = 0;  // atomic, initial value 0
 
 // Any scheduler can atomically update:
 spawnOn "AI" {
@@ -1036,13 +1036,13 @@ spawnOn "Physics" {
 };
 
 // Read current value (atomic read)
-private _current = _counter get;  // always consistent
+private _current = get _counter;  // always consistent (or _counter + 0)
 
 // Compare-and-swap
 _counter compareSwap [42, 99];  // if value == 42, set to 99
 
-// Supported ops on Shared<Number>: add, sub, get, set, compareSwap, min, max
-// Supported ops on Shared<Boolean>: get, set, compareSwap, toggle
+// Supported ops on shared Number: add, sub, compareSwap, min, max
+// Supported ops on shared Boolean: compareSwap, toggle
 ```
 
 Under the hood: `Shared<T>` wraps a value with CAS (compare-and-swap) operations. No locks. Uses `Interlocked` for numbers, `Volatile.Read/Write` for reads. For complex types, `Shared<T>` only supports `get`/`set` (atomic reference swap).
@@ -1061,8 +1061,8 @@ COUNTER = COUNTER + 1;  // COUNTER == 1
 COUNTER = COUNTER + 1;  // COUNTER == 1 (its own copy!)
 
 // To share a global across schedulers:
-global SHARED_COUNTER = Shared create 0;
-// Now all schedulers see same Shared<Number>
+shared SHARED_COUNTER = 0;
+// Now all schedulers see same atomic Number
 ```
 
 This is the **key insight** that eliminates 90% of potential data races. Since each scheduler has its own global namespace, a scripter who never uses `spawnOn` never encounters shared state. Period.
@@ -1140,7 +1140,7 @@ When a fiber on scheduler "AI" calls `setPos` and that command is `Isolated` to 
 | `Channel send` | `[Channel<T>, T] → Nothing` | Send value through channel. |
 | `Channel receive` | `Channel<T> → T` | Receive value (suspends fiber). |
 | `Channel canReceive` | `Channel<T> → Boolean` | Check if data available (non-blocking). |
-| `Shared create` | `T → Shared<T>` | Create synchronized mutable wrapper. |
+| `shared` | `T → Nothing` | Declare shared (atomic) variable. Like `private` but CAS-based. |
 | `Shared get` | `Shared<T> → T` | Atomic read. |
 | `Shared set` | `[Shared<T>, T] → Nothing` | Atomic write. |
 | `Shared add` | `[Shared<Number>, Number] → Nothing` | Atomic increment (Number only). |
@@ -1672,7 +1672,7 @@ public interface ISqHost
 | `SQSharp.Compiler` | Lexer + Pratt parser + bytecode compiler |
 | `SQSharp.CLI` | dotnet tool (run, repl, compile) |
 | `SQSharp.Hosting` | Host abstractions + std library commands |
-| `SQSharp.Unity` | Unity MonoBehaviour host, coroutine bridge (future) |
+| `SQSharp.Unity` | Unity MonoBehaviour host, coroutine bridge (🏠 separate package) |
 
 ---
 

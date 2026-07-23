@@ -50,6 +50,9 @@ SQF.NET/
 │   ├── HostMinimal/
 │   └── HostGame/
 └── docs/
+    ├── for-sqf-scripters.md     # Migration guide for SQF users
+    ├── for-dotnet-devs.md       # Embedding guide for .NET devs
+    ├── quick-reference.md       # One-page language reference
     ├── plan.md                  # This file
     ├── language-spec.md         # Syntax, operators, precedence, control structures
     ├── types.md                 # Data types, magic types, nil/void
@@ -67,7 +70,7 @@ SQF.NET/
 | `SQSharp.Compiler` | Lexer + Pratt parser + bytecode compiler |
 | `SQSharp.CLI` | dotnet tool (run, repl, compile) |
 | `SQSharp.Hosting` | Host abstractions + std library commands |
-| `SQSharp.Unity` | Unity MonoBehaviour host, coroutine bridge (future) |
+| `SQSharp.Unity` | Unity MonoBehaviour host, coroutine bridge (🏠 separate package) |
 
 ## Host API
 

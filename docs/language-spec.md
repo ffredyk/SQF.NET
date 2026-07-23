@@ -14,6 +14,22 @@ everything is provided via operators (scripting commands). **Including control f
 | **Unary** | `operator <right>` | `count _arr`, `str 123` | Greedy: consumes immediate right-side value. |
 | **Binary** | `<left> operator <right>` | `_a + _b`, `_arr select 0` | Resolved by precedence; equal→left-to-right. |
 
+### Strict Arity Rule
+
+Every command takes exactly **ONE expression** on its right side. Commands needing
+3+ parameters MUST use an **array** on the right side. No exceptions.
+
+```sqf
+// Correct:
+count _arr                    // unary: right = _arr
+_arr set [idx, val]           // binary: left = _arr, right = [idx, val]
+spawnOn ["AI", { code }]      // unary: right = [scheduler, code]
+_args spawnOn ["AI", { ... }] // binary: left = args, right = [scheduler, code]
+
+// Wrong (parser rejects):
+spawnOn "AI" { code }         // TWO right-side values — must wrap in array
+```
+
 ## Syntax Basics
 
 - **Terminators**: `;` (preferred) or `,`
@@ -259,7 +275,7 @@ _a = expr   → [expr bytecode], STORE_LOCAL <_a>, DUP
 - `try`/`catch`, structured errors
 - `==` is strict (`isEqualTo` semantics)
 - `nil` is storable (not deletive), `undefine` for deletion
-- `await`, promise combinators, `spawnOn`/`spawnParallel`
+- `await`, promise combinators, `spawnOn [scheduler,code]` / `spawnParallel {code}`
 - Implicit thread safety, `Freeze`/`Channel`/`Shared`
 - Regular expressions, `#pragma` directives
 - Debugger hooks
