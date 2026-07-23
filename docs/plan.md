@@ -14,7 +14,7 @@
 | **Integration** | Standalone CLI + NuGet library |
 | **.NET** | .NET 10 |
 | **Name** | SQ# (SQF Sharp) |
-| **Preprocessor** | Hybrid — module system (default) + optional preprocessor pass for legacy .sqf |
+| **Preprocessor** | Optional preprocessor pass for legacy .sqf files |
 | **Serialization** | Binary .sqfc bytecode format |
 | **First milestone** | Full language + host demo |
 | **Unity** | Design for it, build later |

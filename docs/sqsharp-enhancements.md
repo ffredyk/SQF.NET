@@ -88,7 +88,7 @@ _c = _x + _arr select 0;  // _x + (_arr select 0)
 **Key differences**:
 - Full precedence table documented
 - Identifier-as-operator with known precedence (PrecBinary=4)
-- Expression breaker keywords: `if`, `while`, `for`, `switch`, `import`, `try`, `return`, `global`, `private`, `shared`, `then`, `else`, `do`, `from`, `to`, `step`, `catch`
+- Expression breaker keywords: `if`, `while`, `for`, `switch`, `try`, `return`, `global`, `private`, `shared`, `then`, `else`, `do`, `from`, `to`, `step`, `catch`
 - No ambiguous `a b c` parsing
 
 ---
@@ -270,38 +270,7 @@ private _total = _r1 + _r2 + _r3;
 
 ---
 
-## 7. Module System — `import`
-
-### SQF Problem
-
-No module system. Everything is `#include` (text substitution) or `execVM` (runtime loading). Namespace collisions. Circular dependency risks. No encapsulation.
-
-### SQ# Fix
-
-`import` loads and caches modules:
-
-```sqf
-// math_utils.sqf:
-private _PI = 3.14159265359;
-private _E = 2.71828182846;
-
-// Export a namespace:
-export { _PI, _E, circleArea = { _this * _this * _PI; } };
-
-// main.sqf:
-import "math_utils.sqf";
-private _area = 5 call circleArea;  // 78.54
-```
-
-**Key differences**:
-- Modules are loaded once and cached
-- Explicit exports (no global namespace pollution)
-- Circular dependency detection
-- Compile-time resolution (fast)
-
----
-
-## 8. Rich Array & HashMap Types
+## 7. Rich Array & HashMap Types
 
 ### SQF Problem
 
@@ -332,7 +301,7 @@ Full-featured `SqArray` and `SqHashMap`:
 
 ---
 
-## 9. Error Handling — Try/Catch, Typed Errors
+## 8. Error Handling — Try/Catch, Typed Errors
 
 ### SQF Problem
 
@@ -361,7 +330,7 @@ try {
 
 ---
 
-## 10. CLI Development Tools
+## 9. CLI Development Tools
 
 ### SQF Problem
 
@@ -399,7 +368,7 @@ SQ# REPL (type 'exit' to quit)
 
 ---
 
-## 11. .NET Interop — Host-Defined Commands
+## 10. .NET Interop — Host-Defined Commands
 
 ### SQF Problem
 
@@ -436,7 +405,7 @@ host.ExecuteString(@"
 
 ---
 
-## 12. Thread Safety — Guarantees, Not Hopes
+## 11. Thread Safety — Guarantees, Not Hopes
 
 ### SQF Problem
 
@@ -479,7 +448,7 @@ In Arma, there IS no multithreading for scripts. But when SQ# adds it, thread sa
 
 ---
 
-## 13. Performance Optimizations
+## 12. Performance Optimizations
 
 ### Compile-Time
 
@@ -506,22 +475,20 @@ In Arma, there IS no multithreading for scripts. But when SQ# adds it, thread sa
 
 ---
 
-## 14. What SQ# Intentionally Does NOT Have
+## 13. What SQ# Intentionally Does NOT Have
 
 Some SQF features are deliberately omitted or changed:
 
 | SQF Feature | SQ# Status | Reason |
 |---|---|---|
-| `nil` deletes variables | ✅ Matches SQF | `nil` assignment deletes variables. `isNil` checks if undefined. |
-| `_x` auto-available in `forEach` | ⚠️ Different | Use `params` or explicit `_x` binding |
-| `forEachMember` / `forEachMemberAgent` | 🔜 Planned | Team-based iteration (StdLib) |
+| `_x` auto-available in `forEach` | ✅ Matches SQF | `_x` and `_forEachIndex` auto-bound in forEach loops |
 | `configFile` / `missionConfigFile` | ❌ Not applicable | Config is an Arma concept. Host-defined equivalent. |
 | `uiNamespace` / `parsingNamespace` | ❌ Not applicable | UI is host-defined |
 | `callExtension` | 🏠 Host | .NET host registers commands via `RegisterCommand` |
 | `preprocessFileLineNumbers` | 🔜 Planned | SQ# preprocessor exists, needs runtime integration |
-| `terminate` | ❌ Changed | Use fiber cancellation (🔜 Planned) |
-| `isNil { code }` force-unscheduled | ❌ Not needed | Use `call` from unscheduled context |
-| 10,000 iteration while limit | ❌ Removed | No artificial limit. Scheduler budget provides natural backpressure. |
+| `terminate` | ✅ Implemented | `terminate _handle` kills script handle and its fiber |
+| `isNil { code }` force-unscheduled | 🆕 Replaced | Use `callUnscheduled { code }` to run code outside scheduler |
+| 10,000 iteration while limit | ⚙️ Host-configurable | Host sets `SqHost.MaxIterations`. Default: unlimited. |
 
 ---
 
@@ -529,14 +496,14 @@ Some SQF features are deliberately omitted or changed:
 
 | Area | SQF (Arma 3) | SQ# |
 |---|---|---|
-| Type system | Dynamic, nil-deletes-vars | Tagged union, nil is a value |
+| Type system | Dynamic, nil-deletes-vars | Tagged union, nil deletes variables (SQF compat) |
 | Parser | Hand-written C, heuristic | Pratt parser, 11 precedence levels |
 | Execution | AST walking | Bytecode VM (29 opcodes) |
 | Threading | None (single scheduler) | Cooperative multi-scheduler |
 | Thread safety | N/A | Ownership + freeze + lock-free primitives |
 | Multiplayer | Engine-coupled networking | Scheduler = machine, portable |
 | Async | `sleep`/`waitUntil` only | + `await`, ScriptHandle promises |
-| Modules | `#include` text substitution | `import` with caching & exports |
+| Modules | `#include` text substitution | `#include` preprocessor (opt-in) |
 | Error handling | Silent crashes, cryptic errors | try/catch, typed errors |
 | HashMap | 2.14+ only | Yes, with key validation |
 | CLI tools | None | lex, parse, compile, run, repl |

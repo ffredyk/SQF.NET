@@ -42,4 +42,10 @@ public interface ISqScheduler
 
     /// <summary>Unique ID of this scheduler (for ownership tracking).</summary>
     int SchedulerId { get; }
+
+    /// <summary>Maximum iterations for forEach/while loops. 0 = unlimited.</summary>
+    int MaxIterations { get; }
+
+    /// <summary>Execute code directly (unscheduled, bypassing fiber queue).</summary>
+    SqValue CallUnscheduled(BytecodeChunk chunk, SqValue[]? args);
 }

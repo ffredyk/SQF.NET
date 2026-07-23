@@ -270,7 +270,6 @@ _a = expr   → [expr bytecode], STORE_LOCAL <_a>, DUP
 ### Add (SQ# Modernizations)
 - Clean syntax sugar for control structures
 - Optional static type annotations
-- Module/import system
 - String interpolation, escape sequences, verbatim/multi-line strings
 - `try`/`catch`, structured errors
 - `==` is strict (`isEqualTo` semantics)
@@ -278,6 +277,7 @@ _a = expr   → [expr bytecode], STORE_LOCAL <_a>, DUP
 - `await`, promise combinators, `spawnOn [scheduler,code]` / `spawnParallel {code}`
 - Implicit thread safety, `Freeze`/`Channel`/`Shared`
 - Regular expressions, `#pragma` directives
+- `_x` and `_forEachIndex` auto-bound in forEach (SQF compat)
 - Debugger hooks
 
 ### Drop

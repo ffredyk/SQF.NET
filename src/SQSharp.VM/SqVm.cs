@@ -500,6 +500,63 @@ public class SqVm
             }
             return SqValue.Nil;
         });
+
+        // forEach — iterate array, execute code for each element
+        // Binary: _array forEach { code }
+        // _x = current element (local slot 1), _forEachIndex = index (local slot 2)
+        RegisterBinary("forEach", (arr, code) =>
+        {
+            if (arr.Type != Core.SqType.Array)
+                throw new SqTypeError($"forEach expects Array, got {arr.Type}");
+            if (code.Type != Core.SqType.Code)
+                throw new SqTypeError($"forEach expects Code, got {code.Type}");
+
+            var a = arr.AsArray();
+            var sqCode = (SqCode)code.RawObject!;
+            var childChunk = _chunk.Children[sqCode.BytecodeOffset];
+
+            // Check iteration limit (host-configurable)
+            if (_scheduler != null && _scheduler.MaxIterations > 0 && a.Count > _scheduler.MaxIterations)
+                throw new SqTypeError($"forEach: array size {a.Count} exceeds iteration limit {_scheduler.MaxIterations}");
+
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (_state != VmState.Running) break;
+
+                var nestedVm = new SqVm(childChunk, _globals, _scheduler);
+                // _this = [element, index, array] (SQF compat)
+                nestedVm.SetLocal(0, new SqValue(Core.SqType.Array,
+                    new SqArray(new[] { a[i], new SqValue((double)i), arr }, ownerSchedulerId: _schedulerId)));
+                nestedVm.SetLocal(1, a[i]);                        // _x = element
+                nestedVm.SetLocal(2, new SqValue((double)i));      // _forEachIndex = index
+
+                // Inherit host commands
+                foreach (var kv in _nularCommands) nestedVm.RegisterNularById(kv.Key, kv.Value);
+                foreach (var kv in _unaryCommands) nestedVm.RegisterUnaryById(kv.Key, kv.Value);
+                foreach (var kv in _binaryCommands) nestedVm.RegisterBinaryById(kv.Key, kv.Value);
+
+                var result = nestedVm.Execute();
+                if (nestedVm.State == VmState.Error)
+                    throw new SqTypeError($"forEach error: {nestedVm.Result}");
+            }
+            return SqValue.Nil;
+        });
+
+        // callUnscheduled — execute code outside scheduler (SQF isNil {code} replacement)
+        // Unary: callUnscheduled { code }
+        RegisterUnary("callUnscheduled", arg =>
+        {
+            if (arg.Type != Core.SqType.Code)
+                throw new SqTypeError($"callUnscheduled expects Code, got {arg.Type}");
+            var sqCode = (SqCode)arg.RawObject!;
+            var childChunk = _chunk.Children[sqCode.BytecodeOffset];
+            if (_scheduler != null)
+                return _scheduler.CallUnscheduled(childChunk, null);
+            // No scheduler — execute directly
+            var nestedVm = new SqVm(childChunk, _globals, null);
+            return nestedVm.Execute();
+        });
+
         // Sleep / scheduling
         RegisterUnary("sleep", arg =>
         {
@@ -718,6 +775,11 @@ public class SqVm
     public void RegisterNular(string name, Func<SqValue> handler) => _nularCommands[CmdId(name)] = handler;
     public void RegisterUnary(string name, Func<SqValue, SqValue> handler) => _unaryCommands[CmdId(name)] = handler;
     public void RegisterBinary(string name, Func<SqValue, SqValue, SqValue> handler) => _binaryCommands[CmdId(name)] = handler;
+
+    // Register by already-resolved command ID (for inheriting commands from parent VM)
+    public void RegisterNularById(int cmdId, Func<SqValue> handler) { if (cmdId >= 0) _nularCommands[cmdId] = handler; }
+    public void RegisterUnaryById(int cmdId, Func<SqValue, SqValue> handler) { if (cmdId >= 0) _unaryCommands[cmdId] = handler; }
+    public void RegisterBinaryById(int cmdId, Func<SqValue, SqValue, SqValue> handler) { if (cmdId >= 0) _binaryCommands[cmdId] = handler; }
 
     /// <summary>Set a local variable by slot index.</summary>
     /// <summary>

@@ -8,7 +8,7 @@
 - **Integration**: Standalone CLI + NuGet library
 - **.NET**: .NET 10
 - **Name**: SQ# (SQF Sharp)
-- **Preprocessor**: Hybrid — module system (default) + optional preprocessor pass for legacy .sqf
+- **Preprocessor**: Optional preprocessor pass for legacy .sqf files
 - **Serialization**: Binary .sqfc bytecode format
 - **First milestone**: Full language + host demo
 - **Unity**: Design for it, build later
@@ -1285,8 +1285,7 @@ SQ# replaces SQF's flat global namespace system with a **hybrid** model:
 
 | Concept | SQ# |
 |---|---|
-| **Module scope** | Each `import`ed file has its own module scope. Variables are module-private by default. |
-| **`global` keyword** | `global SERVER_FPS = 60;` — explicit global in the module's chosen namespace. |
+| **`global` keyword** | `global SERVER_FPS = 60;` — explicit global declaration. |
 | **Namespaces** | `Namespace` type still exists. `missionNamespace`, `uiNamespace` etc. registered by host. |
 | **`getVariable`/`setVariable`** | Same API: `_ns setVariable ["key", value]`. `_ns getVariable "key"`. |
 | **`with`/`do`** | `with _ns { ... }` — switch namespace context for block. Same as SQF. |
@@ -1427,7 +1426,6 @@ SQ# adds its own preprocessor directives (always available):
 - **Scheduler enhancements**: Named schedulers, configurable time budget, FIFO spawn order, multi-thread schedulers
 - Optional static type annotations (`private _x: int = 5`)
 - Better error messages with source locations
-- Module/import system (`import "utils.sqf"` instead of `#include`)
 - Explicit `global` keyword (no implicit global leak)
 - String interpolation (`f"Hello {_name}"` — compiles to `format` call)
 - String escape sequences (`\n`, `\t`, `\\`, `\"`, `\'`, `\uXXXX`)

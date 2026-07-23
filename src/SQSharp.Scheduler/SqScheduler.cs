@@ -41,6 +41,11 @@ public class SqScheduler : ISqScheduler
     /// <summary>Maximum milliseconds to run fibers per tick.</summary>
     public double TimeBudgetMs { get; set; } = 3.0;
 
+    /// <summary>Maximum loop iterations for forEach/while. 0 = unlimited. Host-configurable.</summary>
+    public int MaxIterations { get; set; } = 0;
+
+    int ISqScheduler.MaxIterations => MaxIterations;
+
     /// <summary>Current scheduler time in seconds.</summary>
     public double CurrentTime => _stopwatch.Elapsed.TotalSeconds;
 
@@ -320,5 +325,17 @@ public class SqScheduler : ISqScheduler
                 _waitingFibers.RemoveAt(i);
             }
         }
+    }
+
+    /// <summary>
+    /// Execute code directly, bypassing the fiber queue (unscheduled execution).
+    /// The code runs synchronously in the caller's thread, not in a fiber.
+    /// Useful for isNil { code } equivalent — callUnscheduled { code }.
+    /// </summary>
+    SqValue ISqScheduler.CallUnscheduled(BytecodeChunk chunk, SqValue[]? args)
+    {
+        var vm = new SqVm(chunk, null, null);
+        if (args != null && args.Length > 0) vm.SetLocal(0, new SqValue(SqType.Array, new SqArray(args, ownerSchedulerId: _schedulerId)));
+        return vm.Execute();
     }
 }

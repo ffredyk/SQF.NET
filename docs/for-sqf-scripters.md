@@ -133,16 +133,6 @@ _arr = [1, 2, 3,];   // ERROR: Unexpected ","
 _arr = [1, 2, 3,];   // OK — trailing comma allowed
 ```
 
-### 🆕 NEW: Module System
-
-```sqf
-// SQF:
-#include "utils.sqf"        // text-based include — macros, namespace pollution
-
-// SQ#:
-import "utils.sqf";         // proper module import, scoped
-```
-
 ### 🆕 NEW: Type Annotations (Optional)
 
 ```sqf
@@ -342,7 +332,7 @@ _myVar, _x1, TAG_Global, _camelCase, _přežral (Unicode OK in SQ#)
 | String interpolation | `format` only | `f"..."` + `format` |
 | Trailing comma | Error | Allowed |
 | Global variables | Implicit (`myVar = 5`) | Explicit (`global MY_VAR = 5`) |
-| Modules | `#include` | `import` |
+| Modules | `#include` | `#include` preprocessor (opt-in) |
 | Multi-threading | Single scheduler | Multi-scheduler, opt-in |
 | Thread safety | N/A | Automatic, implicit |
 | Error handling | No try/catch (except Arma 3) | `try`/`catch` |

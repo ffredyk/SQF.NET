@@ -200,9 +200,8 @@ _vars = allVariables missionNamespace;
 _ns = currentNamespace;
 ```
 
-### SQ# Namespace Model (Hybrid)
+### SQ# Namespace Model
 
-- **Module scope**: Each `import`ed file = own scope. Variables module-private by default.
 - **`global` keyword**: `global SERVER_FPS = 60;` — explicit global.
 - **Namespaces**: Type still exists. Host registers `missionNamespace`, etc.
 - **`getVariable`/`setVariable`**: Same API. `with`/`do` supported.

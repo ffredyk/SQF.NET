@@ -56,6 +56,13 @@ public class SqHost
     /// <summary>Is this host the server?</summary>
     public bool IsServer => true; // SQ# host is always the server in its process
 
+    /// <summary>Maximum loop iterations per forEach/while. 0 = unlimited. Host-configurable.</summary>
+    public int MaxIterations
+    {
+        get => MainScheduler.MaxIterations;
+        set => MainScheduler.MaxIterations = value;
+    }
+
     // --- Events ---
     public event Action<SqFiber>? OnScriptStart;
     public event Action<SqFiber, SqValue?>? OnScriptEnd;

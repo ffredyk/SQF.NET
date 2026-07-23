@@ -25,7 +25,11 @@ public class Compiler
 
         // Reserve slot 0 for _this (function argument, set by call/spawn)
         _locals["_this"] = 0;
-        _localCount = 1;
+        // Reserve slot 1 for _x (element in forEach loops)
+        _locals["_x"] = 1;
+        // Reserve slot 2 for _forEachIndex (index in forEach loops)
+        _locals["_forEachIndex"] = 2;
+        _localCount = 3;
 
         CompileNode(ast);
 
