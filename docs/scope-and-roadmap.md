@@ -31,20 +31,19 @@ The hosting project implements these. SQ# gives you the scripting engine — you
 
 | Feature | Status | Notes |
 |---|---|---|
-| Lazy evaluation `a && {b}` / `a \|\| {b}` | 🔜 Planned | Short-circuit with code blocks. Needs `JumpIfFalse` + `MakeCode` optimization. |
+| Lazy evaluation `a && {b}` / `a \|\| {b}` | ✅ Done | Short-circuit with code blocks. `JumpIfFalse` + `JumpIfTrue` + `Dup` in compiler. |
 | Range operator `..` (PrecRange=5) | 🔜 Planned | `for "_i" from 0 to 10` already works. `0..10` as standalone range. |
-| `switch` / `case` / `default` | 🔜 Planned | Parser stubbed (`ParseSwitch`), needs compiler + VM. |
-| `forEachMember` / `forEachMemberAgent` | ⚠️ Maybe | Team iteration. Could be StdLib or host-defined. |
+| `switch` / `case` / `default` | ✅ Done | Parser, AST (`SwitchDoNode`), compiler (`CompileSwitchDo`), VM tested. |
 | String interpolation `f"Hello {name}"` | ⚠️ Maybe | Parser + compiler work. Nice-to-have. |
-| `try`/`catch`/`throw` — full error propagation | 🔜 Planned | `TryBegin`/`TryEnd`/`Throw` opcodes exist. Needs runtime wiring. |
-| `terminate` (fiber cancellation) | 🔜 Planned | `SqFiber.Terminate()` + VM interrupt. |
+| `try`/`catch`/`throw` — full error propagation | ✅ Done | `TryBegin`/`TryEnd`/`Throw` opcodes + `CompileTryCatch` in compiler. |
+| `terminate` (fiber cancellation) | ✅ Done | `SqFiber.Terminate()` + `terminate` unary command registered. |
 
 ### Compiler
 
 | Feature | Status | Notes |
 |---|---|---|
 | `.sqfc` binary serialization | ✅ Done | Serialize `BytecodeChunk` to binary. Load without re-parsing. |
-| Constant folding | 🔜 Planned | `1 + 2` → `3` at compile time. Peephole optimizer. |
+| Constant folding | ✅ Done | `1 + 2` → `3` at compile time. `TryConstantFold` in compiler. |
 | Dead code elimination | 🔜 Planned | Remove unreachable branches after `return`/`throw`. |
 
 ### VM & Runtime
@@ -52,22 +51,22 @@ The hosting project implements these. SQ# gives you the scripting engine — you
 | Feature | Status | Notes |
 |---|---|---|
 | DAP debugger protocol | 🔜 Planned | Breakpoints, step-in/over, variable inspection, call stack. |
-| Fiber cancellation (`terminate`) | 🔜 Planned | Cooperative cancellation via `CancellationToken` in VM loop. |
+| Fiber cancellation (`terminate`) | ✅ Done | `terminate` unary command + `SqScheduler.TerminateHandle()`. |
 | `preprocessFileLineNumbers` | 🔜 Planned | SQ# preprocessor exists (`SQSharp.Preprocessor`). Needs CLI + runtime integration. |
-| `execVM` — load+compile+spawn file | 🔜 Planned | CLI `run` already does this. Needs runtime `execVM` command. |
+| `execVM` — load+compile+spawn file | ✅ Done | Registered in `SqHost.RegisterCoreCommands()` via `File.ReadAllText` + `ExecuteString`. |
 | `callExtension` (native interop) | 🔜 Planned | .NET host interop via `RegisterCommand` is the replacement. C-friendly FFI for non-.NET hosts. |
-| Stack trace on error | 🔜 Planned | Include script name + line number in error messages. |
+| Stack trace on error | ✅ Done | `MakeError()` includes source file, line, and column. |
 
 ### Standard Library
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Math` commands (`sin`, `cos`, `atan2`, `exp`, `log`, `pow`, `random`) | 🔜 Planned | Wrap `System.Math`. |
-| `selectRandom`, `selectRandomWeighted` | 🔜 Planned | Weighted random from array. |
-| `param` / `params` (default values) | 🔜 Planned | `params ["_a", ["_b", 42]]` — missing arguments get defaults. |
-| `createHashMap` / `createHashMapFromArray` | 🔜 Planned | Constructor syntax. |
+| `Math` commands (`sin`, `cos`, `atan2`, `exp`, `log`, `pow`, `random`, `abs`, `floor`, `ceil`, `round`, `sqrt`, `asin`, `acos`, `tan`) | ✅ Done | Wrap `System.Math`. Registered in `SqHost.RegisterCoreCommands()`. |
+| `selectRandom`, `selectRandomWeighted` | ✅ Done | Registered in `SqHost.RegisterCoreCommands()`. |
+| `param` / `params` (default values) | ✅ Done | Compiler inlines destructuring from `_this` array. `CompileParams()` in compiler. |
+| `createHashMap` / `createHashMapFromArray` | ✅ Done | Both constructors registered in `SqHost.RegisterCoreCommands()`. |
 | `BIS_fnc_*` compatibility layer | ❌ Out of scope | Host provides mission functions. |
-| `diag_*` debugging commands | ⚠️ Maybe | Diagnostics useful for all hosts. |
+| `diag_*` debugging commands | ⚠️ Partial | `diag_tickTime` done. Others not yet. |
 
 ### Scheduler
 
@@ -75,7 +74,7 @@ The hosting project implements these. SQ# gives you the scripting engine — you
 |---|---|---|
 | `spawnOn` — cross-scheduler spawning | ✅ Done | |
 | `await` — promise-based suspension | ✅ Done | |
-| `sleep` / `waitUntil` | ✅ Done | |
+| `sleep` / `await` / `timeout` | ✅ Done | `waitUntil` use case covered by `await _handle timeout seconds`. |
 | `currentScheduler` / `clientOwner` | ✅ Done | |
 | `scheduler` / `isSchedulerLocal` | ✅ Done | |
 | `allSchedulers` / `schedulerName` / `schedulerExists` | ✅ Done | |
@@ -195,32 +194,43 @@ These are explicitly OUT of scope. The hosting project implements them.
 
 ## Version Roadmap
 
-### v0.2 — Language Completeness
-- [ ] `switch`/`case`/`default`
-- [ ] Lazy `&&`/`||` with code blocks
-- [ ] Stack traces in errors
-- [ ] `params` with defaults
-- [ ] `execVM` runtime command
-- [ ] `preprocessFileLineNumbers` integration
+### v0.7 — Current
+- [x] Lexer, Pratt parser, bytecode compiler, stack VM
+- [x] Cooperative fiber scheduler with time-budgeted `Tick()`
+- [x] Multi-scheduler architecture (`spawnOn`, `sendTo`, `scheduler`)
+- [x] Thread safety: ownership tracking, `freeze`/`thaw`, `shared` (CAS), `Channel` (SPSC)
+- [x] `try`/`catch`/`throw` with full error propagation + stack traces
+- [x] Lazy `&&`/`||` with code-block short-circuit
+- [x] `switch`/`case`/`default`
+- [x] `params` with defaults (compiler-inlined destructuring)
+- [x] `call`/`spawn` with args, `await`, `sleep`, `timeout`, `terminate`
+- [x] Constant folding (`TryConstantFold` in compiler)
+- [x] Math commands: `sin`, `cos`, `tan`, `asin`, `acos`, `atan2`, `sqrt`, `abs`, `exp`, `log`, `floor`, `ceil`, `round`, `pow`, `random`
+- [x] `selectRandom` / `selectRandomWeighted`
+- [x] `createHashMap` / `createHashMapFromArray`
+- [x] `execVM` runtime command
+- [x] `.sqfc` binary serializer + CLI compile (`sqsharp compile --binary`)
+- [x] `compile` runtime command
+- [x] Array ops: `pushBack`, `select`, `deleteAt`, `deleteRange`, `resize`, `append`, `reverse`, `sort`, `find`, `in`
+- [x] String ops: `parseNumber`, `toArray`, `toString`, `splitString`, `joinString`, `toLower`, `toUpper`, `trim`
+- [x] Type checks: `isNil`, `str`, `format`, `typeName`
+- [x] CLI: `lex`, `parse`, `compile`, `run`, `repl`, `serialize`, `deserialize`
+- [x] Host API: `SqHost`, `SaveState`/`LoadState`, command registration with thread safety levels
 
-### v0.3 — Compiler & VM Optimizations
-- [ ] Constant folding
-- [ ] Dead code elimination
-- [ ] `.sqfc` binary serialization
-- [ ] Fiber cancellation (`terminate`)
-- [ ] Fiber priority
+### v0.8 — Compiler & Runtime
+- [ ] Dead code elimination (unreachable after `return`/`throw`)
+- [ ] `preprocessFileLineNumbers` integration (`SQSharp.Preprocessor`)
+- [ ] Range operator `..` (standalone range expression)
+- [ ] Fiber priority (high/low queues)
+- [ ] Fiber timeout (`spawnWithTimeout`)
 
-### v0.4 — Tooling
-- [ ] DAP debugger protocol
+### v0.9 — Tooling & Polish
+- [ ] DAP debugger protocol (breakpoints, step-in/over, variable inspection, call stack)
 - [ ] VS Code extension (syntax highlighting, LSP)
-- [ ] `sqsharp compile --binary`
-- [ ] `--watch` mode
-
-### v0.5 — StdLib Expansion
-- [ ] Math commands (`sin`, `cos`, `random`, etc.)
-- [ ] `selectRandom` / `selectRandomWeighted`
-- [ ] `createHashMap` / `createHashMapFromArray`
-- [ ] `diag_*` diagnostics
+- [ ] `--watch` mode (re-run on file change)
+- [ ] String interpolation `f"Hello {name}"`
+- [ ] `callExtension` (native interop / FFI)
+- [ ] `diag_*` diagnostics suite
 
 ### v1.0 — Stable
 - [ ] NuGet packages published
