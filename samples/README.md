@@ -16,6 +16,11 @@ Comprehensive samples demonstrating the SQ# scripting language and host integrat
 | [`error-handling.sqf`](error-handling.sqf) | Error Handling | try/catch, typed catches, throw, structured error objects (_error), nil safety, array safety, error propagation in promises, defensive coding patterns |
 | [`data-structures.sqf`](data-structures.sqf) | HashMaps & Namespaces | createHashMap, set/get/deleteAt, key types, forEach iteration, createHashMapFromArray, nested HashMaps, Namespaces (missionNamespace, setVariable/getVariable), practical patterns (struct, table, method-dispatch, cache, set, frequency counter) |
 | [`optimisation.sqf`](optimisation.sqf) | Performance | Do's and don'ts: string building, array building, loop optimization, early exit, pre-allocation, caching, HashMap vs array scan, FrozenArray for sharing, scheduler-aware design |
+| [`bench-math.sqf`](bench-math.sqf) | Benchmark: Math | CPU throughput: sin/cos/tan/sqrt/log/exp/pow, 100K iterations x 5 trials, diag_tickTime timing |
+| [`bench-array.sqf`](bench-array.sqf) | Benchmark: Arrays | pushBack, select, forEach, sort, find, deleteAt — 5K elements x 5 trials |
+| [`bench-string.sqf`](bench-string.sqf) | Benchmark: Strings | concat vs joinString, format, splitString+join, find, toUpper/toLower — 2K ops x 5 trials |
+| [`bench-hashmap.sqf`](bench-hashmap.sqf) | Benchmark: HashMaps | set, get, createHashMapFromArray, mixed set+get — 2K keys x 5 trials |
+| [`bench-loop.sqf`](bench-loop.sqf) | Benchmark: Loops | for/while/forEach empty-body vs math-body — 50K iterations x 5 trials |
 | [`game-demo.sqf`](game-demo.sqf) | Game Simulation | Full game-like demo: waves of enemies, AI scheduling (spawnOn ["AI", {...}]), combat system, scoring, HUD monitor, PromiseAll for wave completion |
 
 ## C# Host Samples

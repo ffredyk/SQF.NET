@@ -32,6 +32,9 @@ public class BytecodeChunk
     public List<BytecodeChunk> Children { get; } = new();
     public string? SourceFile { get; set; }
 
+    /// <summary>Local variable names, indexed by slot number (for debug/error messages).</summary>
+    public List<string> LocalNames { get; } = new();
+
     /// <summary>Source position debug info — maps instruction index to source line/column.</summary>
     public List<DebugInfoEntry> DebugInfo { get; } = new();
 

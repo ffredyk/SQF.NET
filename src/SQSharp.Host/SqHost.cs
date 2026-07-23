@@ -38,6 +38,7 @@ public class SqHost
 
     private readonly Dictionary<string, SqScheduler> _schedulers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SqValue> _globals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Diagnostics.Stopwatch _realTime = System.Diagnostics.Stopwatch.StartNew();
     private static readonly Random _rng = new();
 
     /// <summary>The main scheduler (pumped by host game loop).</summary>
@@ -613,7 +614,8 @@ public class SqHost
         RegisterNular("nil", () => SqValue.Nil);
         RegisterNular("true", () => SqValue.True);
         RegisterNular("false", () => SqValue.False);
-        RegisterNular("diag_tickTime", () => new SqValue(CurrentTime));
+        RegisterNular("diag_tickTime", () => new SqValue(_realTime.Elapsed.TotalSeconds));
+        RegisterNular("diag_realTime", () => new SqValue(_realTime.Elapsed.TotalMilliseconds));
 
         // Shared (atomic) operations
         RegisterBinary("add", (a, b) =>

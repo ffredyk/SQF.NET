@@ -1,4 +1,5 @@
 using SQSharp.Core;
+using System.Collections.Generic;
 
 namespace SQSharp.VM;
 
@@ -11,10 +12,10 @@ public interface ISqScheduler
     double CurrentTime { get; }
 
     /// <summary>Spawn a new fiber from a bytecode chunk. Returns fiber handle.</summary>
-    object Spawn(BytecodeChunk chunk, string name, SqValue[]? args);
+    object Spawn(BytecodeChunk chunk, string name, SqValue[]? args, Dictionary<string, SqValue>? globals = null);
 
     /// <summary>Spawn a new fiber on a named scheduler. Returns fiber handle.</summary>
-    object SpawnOn(string schedulerName, BytecodeChunk chunk, string name, SqValue[]? args);
+    object SpawnOn(string schedulerName, BytecodeChunk chunk, string name, SqValue[]? args, Dictionary<string, SqValue>? globals = null);
 
     /// <summary>Suspend current fiber for N seconds.</summary>
     void SleepCurrent(double seconds);
@@ -30,6 +31,9 @@ public interface ISqScheduler
 
     /// <summary>Check if a script handle is resolved.</summary>
     bool IsHandleResolved(object handle);
+
+    /// <summary>Get the resolved value of a handle, or null if not resolved.</summary>
+    SqValue? GetHandleResult(object handle);
 
     /// <summary>
     /// Create a new handle that resolves with the original handle's value,

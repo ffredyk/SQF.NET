@@ -46,10 +46,10 @@ public class SqUndefinedVariableError : Exception
 {
     public string VariableName { get; }
 
-    public SqUndefinedVariableError(string name)
-        : base($"Undefined variable '{name}'")
+    public SqUndefinedVariableError(string message)
+        : base(message)
     {
-        VariableName = name;
+        VariableName = message;
     }
 }
 

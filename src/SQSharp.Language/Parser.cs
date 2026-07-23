@@ -78,14 +78,26 @@ public class Parser
         }
 
         // Infix loop for binary operators
-        while (true)
+        // Control structures (while, if, for, switch, try, return) are complete expressions —
+        // they never participate in infix operations.
+        if (!IsCompleteExpression(left))
         {
-            int nextPrec = GetEffectivePrecedence(Peek());
-            if (precedence >= nextPrec) break;
-            left = ParseInfix(left, nextPrec);
+            while (true)
+            {
+                int nextPrec = GetEffectivePrecedence(Peek());
+                if (precedence >= nextPrec) break;
+                left = ParseInfix(left, nextPrec);
+            }
         }
 
         return left;
+    }
+
+    /// <summary>Control structures and other self-contained expressions that don't take infix operators.</summary>
+    private static bool IsCompleteExpression(AstNode node)
+    {
+        return node is WhileDoNode or IfThenElseNode or ForDoNode or ForFromToNode
+            or SwitchDoNode or TryCatchNode or ReturnNode;
     }
 
     // --- Prefix parsing ---
@@ -476,30 +488,10 @@ public class Parser
     {
         int line = _previous.Line;
         int col = _previous.Column;
-
-        // Check for args before call/spawn: args call code
-        AstNode? args = null;
-        if (!Check(TokenType.CodeBlock) && !Check(TokenType.String))
-        {
-            args = ParseExpression(PrecBinary);
-        }
-
-        AstNode code;
-        if (Match(TokenType.CodeBlock))
-        {
-            var body = ParseExpressionFromTokens(_tokens[_pos - 1].NestedTokens!);
-            code = new CodeLiteralNode(
-                body is SequenceNode s ? s.Expressions : new List<AstNode> { body },
-                _tokens[_pos - 1].Line, _tokens[_pos - 1].Column);
-        }
-        else
-        {
-            code = ParseExpression(PrecBinary);
-        }
-
+        var code = ParseBodyOrExpr();
         return isCall
-            ? new CallNode(args, code, line, col)
-            : new SpawnNode(args, code, line, col);
+            ? new CallNode(null, code, line, col)
+            : new SpawnNode(null, code, line, col);
     }
 
     private AstNode ParseImport()
@@ -627,6 +619,8 @@ public class Parser
         if (token.Type == TokenType.Identifier)
         {
             string name = token.Lexeme;
+            // Local variables (starting with _) are never binary operators
+            if (name.StartsWith("_")) return PrecNone;
             if (IsExpressionBreaker(name)) return PrecNone;
             if (string.Equals(name, "and", StringComparison.OrdinalIgnoreCase)) return PrecAnd;
             if (string.Equals(name, "or", StringComparison.OrdinalIgnoreCase)) return PrecOr;

@@ -93,6 +93,19 @@ public class SqVm
     /// </summary>
     public VmState ExecuteStep()
     {
+        if (_state == VmState.Yielded)
+        {
+            // Auto-resume if yield reason resolved (e.g., awaited handle completed)
+            if (YieldReason != null && _scheduler != null && _scheduler.IsHandleResolved(YieldReason))
+            {
+                _state = VmState.Running;
+                // Push the resolved value so subsequent code (StoreLocal, etc.) gets it
+                var result = _scheduler.GetHandleResult(YieldReason);
+                Push(result ?? SqValue.Nil);
+            }
+            else
+                return _state;
+        }
         if (_state != VmState.Running) return _state;
         if (_ip >= _chunk.Instructions.Count)
         {
@@ -231,7 +244,7 @@ public class SqVm
                 case OpCode.MakeCode:
                     {
                         var childChunk = _chunk.Children[inst.Operand];
-                        var code = new SqCode(null, bytecode: null, bytecodeOffset: inst.Operand);
+                        var code = new SqCode(null, compiledChunk: childChunk);
                         Push(new SqValue(Core.SqType.Code, code));
                     }
                     break;
@@ -325,9 +338,14 @@ public class SqVm
 
                         if (_scheduler != null)
                         {
-                            var childChunk = _chunk.Children[((SqCode)codeVal.RawObject!).BytecodeOffset];
+                            var sqCode = (SqCode)codeVal.RawObject!;
+                            BytecodeChunk childChunk;
+                            if (sqCode.CompiledChunk != null)
+                                childChunk = sqCode.CompiledChunk;
+                            else
+                                childChunk = _chunk.Children[sqCode.BytecodeOffset];
                             var args = arg.HasValue ? new[] { arg.Value } : null;
-                            var handle = _scheduler.Spawn(childChunk, "spawn", args);
+                            var handle = _scheduler.Spawn(childChunk, "spawn", args, _globals);
                             Push(new SqValue(SqType.ScriptHandle, handle));
                         }
                         else
@@ -701,8 +719,13 @@ public class SqVm
             var codeVal = arr[1];
             if (codeVal.Type != SqType.Code || _scheduler == null)
                 return SqValue.Nil;
-            var childChunk = _chunk.Children[((SqCode)codeVal.RawObject!).BytecodeOffset];
-            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", null);
+            var sqCode = (SqCode)codeVal.RawObject!;
+            BytecodeChunk childChunk;
+            if (sqCode.CompiledChunk != null)
+                childChunk = sqCode.CompiledChunk;
+            else
+                childChunk = _chunk.Children[sqCode.BytecodeOffset];
+            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", null, _globals);
             return new SqValue(SqType.ScriptHandle, handle);
         });
 
@@ -714,8 +737,13 @@ public class SqVm
             var codeVal = arr[1];
             if (codeVal.Type != SqType.Code || _scheduler == null)
                 return SqValue.Nil;
-            var childChunk = _chunk.Children[((SqCode)codeVal.RawObject!).BytecodeOffset];
-            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", new[] { left });
+            var sqCode = (SqCode)codeVal.RawObject!;
+            BytecodeChunk childChunk;
+            if (sqCode.CompiledChunk != null)
+                childChunk = sqCode.CompiledChunk;
+            else
+                childChunk = _chunk.Children[sqCode.BytecodeOffset];
+            var handle = _scheduler.SpawnOn(schedName, childChunk, "spawnOn", new[] { left }, _globals);
             return new SqValue(SqType.ScriptHandle, handle);
         });
 
@@ -725,6 +753,9 @@ public class SqVm
         {
             if (_scheduler == null || arg.RawObject == null)
                 return SqValue.Nil;
+            // If already resolved, return value without yielding
+            if (_scheduler.IsHandleResolved(arg.RawObject))
+                return _scheduler.GetHandleResult(arg.RawObject) ?? SqValue.Nil;
             _scheduler.AwaitHandle(arg.RawObject, double.PositiveInfinity);
             _state = VmState.Yielded;
             YieldReason = arg.RawObject;

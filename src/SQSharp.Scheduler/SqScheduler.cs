@@ -85,10 +85,12 @@ public class SqScheduler : ISqScheduler
         return fiber;
     }
 
-    object ISqScheduler.Spawn(BytecodeChunk chunk, string name, SqValue[]? args)
+    object ISqScheduler.Spawn(BytecodeChunk chunk, string name, SqValue[]? args, Dictionary<string, SqValue>? globals = null)
     {
-        var globals = new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
-        var vm = new SqVm(chunk, globals, this);
+        var vmGlobals = globals != null
+            ? new Dictionary<string, SqValue>(globals, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
+        var vm = new SqVm(chunk, vmGlobals, this);
         // Inject parent's commands
         if (NularCommands != null)
             foreach (var kv in NularCommands) vm.RegisterNular(kv.Key, kv.Value);
@@ -194,14 +196,16 @@ public class SqScheduler : ISqScheduler
         }
     }
 
-    object ISqScheduler.SpawnOn(string schedulerName, BytecodeChunk chunk, string name, SqValue[]? args)
+    object ISqScheduler.SpawnOn(string schedulerName, BytecodeChunk chunk, string name, SqValue[]? args, Dictionary<string, SqValue>? globals = null)
     {
         var target = Find(schedulerName);
         if (target == null)
             throw new InvalidOperationException($"Scheduler '{schedulerName}' not found. Available: {string.Join(", ", _registry.Keys)}");
 
-        var globals = new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
-        var vm = new SqVm(chunk, globals, target);
+        var vmGlobals = globals != null
+            ? new Dictionary<string, SqValue>(globals, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
+        var vm = new SqVm(chunk, vmGlobals, target);
         if (target.NularCommands != null)
             foreach (var kv in target.NularCommands) vm.RegisterNular(kv.Key, kv.Value);
         if (target.UnaryCommands != null)
@@ -222,28 +226,31 @@ public class SqScheduler : ISqScheduler
 
         if (handle.IsResolved)
         {
-            // Already resolved — push value and continue
+            // Already resolved — re-enqueue and continue
             _activeFiber.State = FiberState.Ready;
             _readyQueue.Enqueue(_activeFiber);
             return;
         }
 
+        // Capture fiber now — _activeFiber changes when other fibers run
+        var fiber = _activeFiber;
+
         // Mark fiber as waiting on this handle
-        _activeFiber.State = FiberState.Waiting;
-        _activeFiber.WaitUntil = timeoutSeconds < double.PositiveInfinity
+        fiber.State = FiberState.Waiting;
+        fiber.WaitUntil = timeoutSeconds < double.PositiveInfinity
             ? CurrentTime + timeoutSeconds
             : double.PositiveInfinity;
 
-        _waitingFibers.Add(_activeFiber);
+        _waitingFibers.Add(fiber);
 
         // When handle resolves, wake the fiber
         handle.OnResolved += _ =>
         {
-            if (_activeFiber != null && _activeFiber.State == FiberState.Waiting)
+            if (fiber.State == FiberState.Waiting)
             {
-                _activeFiber.State = FiberState.Ready;
-                _readyQueue.Enqueue(_activeFiber);
-                _waitingFibers.Remove(_activeFiber);
+                fiber.State = FiberState.Ready;
+                _readyQueue.Enqueue(fiber);
+                _waitingFibers.Remove(fiber);
             }
         };
     }
@@ -257,6 +264,11 @@ public class SqScheduler : ISqScheduler
     bool ISqScheduler.IsHandleResolved(object handleObj)
     {
         return ((ScriptHandle)handleObj).IsResolved;
+    }
+
+    SqValue? ISqScheduler.GetHandleResult(object handleObj)
+    {
+        return ((ScriptHandle)handleObj).ResolvedValue;
     }
 
     object ISqScheduler.ScheduleTimeout(object handleObj, double timeoutSeconds)

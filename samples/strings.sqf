@@ -82,11 +82,11 @@ private _clean = trim _padded;         // "hello"
 
 // ---- splitString / joinString ----
 private _csv = "alpha,bravo,charlie,delta";
-private _items = splitString [_csv, ","];
+private _items = _csv splitString ",";
 // _items = ["alpha", "bravo", "charlie", "delta"]
 
 private _tags = ["sqf", "script", "game"];
-private _tagStr = joinString [_tags, " | "];
+private _tagStr = _tags joinString " | ";
 // "sqf | script | game"
 
 // ---- toString / toArray (char code conversion) ----
@@ -112,7 +112,7 @@ private _parts = [];
 for "_i" from 0 to 999 do {
     _parts pushBack "x";
 };
-private _fastMsg = joinString [_parts, ""];  // 1 allocation
+private _fastMsg = _parts joinString "";  // 1 allocation
 
 // ---- Regular Expressions (SQ# addition) ----
 // private _match = "abc123" =~ /[a-z]+\d+/;   // true

@@ -144,9 +144,9 @@ private _thawed = _frozen thaw;      // New mutable copy
 
 // ---- joinString / splitString ----
 private _parts = ["alpha", "bravo", "charlie"];
-private _joined = joinString [_parts, ", "];  // "alpha, bravo, charlie"
+private _joined = _parts joinString ", ";  // "alpha, bravo, charlie"
 
 private _csv = "a,b,c,d";
-private _split = splitString [_csv, ","];     // ["a","b","c","d"]
+private _split = _csv splitString ",";     // ["a","b","c","d"]
 
 "arrays complete"

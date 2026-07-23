@@ -176,9 +176,11 @@ private _v = _map get "key1";   // 100
 | [SQ# for SQF Scripters](docs/for-sqf-scripters.md) | 🎮 SQF users | Migration guide — what changed, how to script |
 | [SQ# for .NET Developers](docs/for-dotnet-devs.md) | 💻 .NET devs | Embedding guide, NuGet, host API |
 | [Quick Reference](docs/quick-reference.md) | 📋 Everyone | One-page language reference card |
+| [Command Reference](docs/commands.md) | 📋 Everyone | Complete reference for all 100+ internal commands |
 | [Multithreading](docs/multithreading.md) | 🎮 SQF users | Fibers, schedulers, channels, shared, freeze/thaw |
 | [Multiplayer](docs/multiplayer.md) | 🎮 SQF users | Locality, remoteExec, publicVariable, JIP, patterns |
 | [Code Optimisation](docs/optimisation.md) | 🎮 SQF users | Performance tips, do/don't, scheduling |
+| [Benchmark Results](docs/benchmarks.md) | 📊 Everyone | SQ# vs Arma 3 performance, explanations, constraints |
 | [Language Specification](docs/language-spec.md) | 🔧 Contributors | Syntax, operators, precedence, control structures |
 | [Type System](docs/types.md) | 🔧 Contributors | Data types, magic types, nil/void semantics |
 | [Scheduler & Thread Safety](docs/scheduler-threads.md) | 🔧 Contributors | Execution model, fiber scheduling, implicit safety |

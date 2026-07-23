@@ -120,8 +120,8 @@ str 42;                        // "42"
 parseNumber "123.45";          // 123.45
 toString [65, 66];             // "AB"
 toArray "AB";                  // [65, 66]
-splitString ["a,b,c", ","];    // ["a","b","c"] — use binary: _str splitString ","
-joinString [["a","b"], "-"];   // "a-b"
+_str splitString ",";          // ["a","b","c"] — binary: left=string, right=delimiter
+["a","b"] joinString "-";      // "a-b"
 toLower _str; toUpper _str; trim _str;
 ```
 

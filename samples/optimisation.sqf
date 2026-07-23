@@ -21,7 +21,7 @@ private _parts = [];
 for "_i" from 0 to 999 do {
     _parts pushBack "x";
 };
-private _fastStr = joinString [_parts, ""];
+private _fastStr = _parts joinString "";
 
 // EVEN FASTER — use format/interpolation for known patterns:
 private _n = 42;

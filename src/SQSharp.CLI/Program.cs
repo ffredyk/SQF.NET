@@ -81,6 +81,13 @@ class Program
         var host = new SqHost();
         host.DeclareMultiplayerCommands();
         host.OnPrint += msg => Console.WriteLine(msg);
+
+        // Pre-create benchmark schedulers for spawnOn parallelism tests
+        host.CreateScheduler("B_1");
+        host.CreateScheduler("B_2");
+        host.CreateScheduler("B_3");
+        host.CreateScheduler("B_4");
+
         var fiber = host.ExecuteString(source, Path.GetFileName(args[1]));
         // Pump scheduler until fiber completes
         while (fiber.State != SQSharp.Scheduler.FiberState.Completed

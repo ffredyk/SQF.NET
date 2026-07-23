@@ -36,6 +36,15 @@ public class Compiler
         // Implicit return of last value
         _chunk.Emit(OpCode.Ret);
         _chunk.LocalCount = _localCount;
+
+        // Populate local variable names for debug/error messages
+        _chunk.LocalNames.Clear();
+        for (int i = 0; i < _localCount; i++)
+            _chunk.LocalNames.Add("");
+        foreach (var kv in _locals)
+            if (kv.Value < _chunk.LocalNames.Count)
+                _chunk.LocalNames[kv.Value] = kv.Key;
+
         return _chunk;
     }
 
@@ -380,14 +389,19 @@ public class Compiler
             CompileBody(node.ElseBody);
             _chunk.PatchJump(jumpPastElse, _chunk.Count);
         }
+        else
+        {
+            // No else — push nil for false case (SQF: if returns nil when no branch taken)
+            EmitPushNil();
+        }
     }
 
     private void CompileWhile(WhileDoNode node)
     {
         int loopStart = _chunk.Count;
 
-        // Condition
-        CompileNode(node.Condition);
+        // Condition (unwrap CodeLiteral — while condition is { code } in SQF)
+        CompileBody(node.Condition);
         int exitJump = _chunk.EmitPlaceholder(OpCode.JumpIfFalse);
 
         // Body
@@ -396,11 +410,13 @@ public class Compiler
 
         // Pop the nil result from body (while returns nil, not last body value)
         _chunk.Emit(OpCode.Pop);
-        _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(SqValue.Nil));
 
         // Loop back
         _chunk.Emit(OpCode.Jump, loopStart);
         _chunk.PatchJump(exitJump, _chunk.Count);
+
+        // Push nil as while result (at exit, not every iteration)
+        _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(SqValue.Nil));
 
         _breakJumps.Pop();
     }
@@ -416,22 +432,24 @@ public class Compiler
 
         CompileNode(node.From);
         _chunk.Emit(OpCode.StoreLocal, varSlot);
-        _chunk.Emit(OpCode.Pop); // discard dup from assignment
+
+        // Hoist 'to' value out of loop — evaluate once, store in temp local
+        int toSlot = _localCount++;
+        CompileNode(node.To);
+        _chunk.Emit(OpCode.StoreLocal, toSlot);
 
         int loopStart = _chunk.Count;
 
-        // Check condition: _var <= to
+        // Check condition: _var <= to (use cached toSlot)
         _chunk.Emit(OpCode.PushLocal, varSlot);
-        CompileNode(node.To);
-
-        // Push 1 if step is positive, -1 if negative (simplification: always 1 for now)
+        _chunk.Emit(OpCode.PushLocal, toSlot);
         int condCmdId = _chunk.AddGlobal("<=");
         _chunk.Emit(OpCode.BinaryCall, condCmdId);
 
         int exitJump = _chunk.EmitPlaceholder(OpCode.JumpIfFalse);
 
         // Body
-        CompileNode(node.Body);
+        CompileBody(node.Body);
         _chunk.Emit(OpCode.Pop); // discard body result
 
         // Increment: _var = _var + step
@@ -443,7 +461,6 @@ public class Compiler
         int addCmdId = _chunk.AddGlobal("+");
         _chunk.Emit(OpCode.BinaryCall, addCmdId);
         _chunk.Emit(OpCode.StoreLocal, varSlot);
-        _chunk.Emit(OpCode.Pop);
 
         // Loop back
         _chunk.Emit(OpCode.Jump, loopStart);
@@ -524,7 +541,9 @@ public class Compiler
     {
         if (body is CodeLiteralNode codeLit)
         {
-            if (codeLit.Body.Count == 1)
+            if (codeLit.Body.Count == 0)
+                EmitPushNil();  // empty body {} returns nil
+            else if (codeLit.Body.Count == 1)
                 CompileNode(codeLit.Body[0]);
             else
                 CompileNode(new SequenceNode(codeLit.Body, codeLit.Line, codeLit.Column));
@@ -566,8 +585,8 @@ public class Compiler
 
         int loopStart = _chunk.Count;
 
-        // Condition
-        CompileNode(node.Condition);
+        // Condition (unwrap CodeLiteral)
+        CompileBody(node.Condition);
         int exitJump = _chunk.EmitPlaceholder(OpCode.JumpIfFalse);
 
         // Body
@@ -586,7 +605,7 @@ public class Compiler
         _breakJumps.Pop();
 
         // for returns nil
-        _chunk.Emit(OpCode.PushConst, _chunk.AddConstant(SqValue.Nil));
+        EmitPushNil();
     }
 
     // --- switch / case / default ---
