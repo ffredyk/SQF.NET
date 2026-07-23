@@ -277,3 +277,14 @@ TBD
 | **v1.0** | Stable | NuGet packages, API docs, benchmarks, compatibility guarantee |
 
 See [Scope & Roadmap](docs/scope-and-roadmap.md) for full details.
+
+## AI-Assisted Development
+
+This project was created with AI-assisted coding tools. All architecture, design
+decisions, and feature direction were made under competent human supervision by
+a skilled SQF scripter and professional C# programmer. AI tools were used to
+accelerate implementation, but every line of code was reviewed, tested, and
+validated by a human.
+
+That said, errors and bugs may still be present. If you encounter issues at
+compile time or runtime, please report them. Contributions and fixes are welcome.
