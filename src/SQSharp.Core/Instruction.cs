@@ -41,8 +41,6 @@ public readonly struct Instruction
             OpCode.Dup => "DUP",
             OpCode.Pop => "POP",
             OpCode.Swap => "SWAP",
-            OpCode.SpawnOn => $"SPAWN_ON {Operand}",
-            OpCode.Await => "AWAIT",
             OpCode.Throw => "THROW",
             OpCode.TryBegin => $"TRY_BEGIN {Operand}",
             OpCode.TryEnd => "TRY_END",

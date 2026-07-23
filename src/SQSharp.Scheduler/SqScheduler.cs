@@ -13,6 +13,10 @@ namespace SQSharp.Scheduler;
 public class SqScheduler : ISqScheduler
 {
     private static int _nextSchedulerId = 1;
+
+    /// <summary>Global registry mapping scheduler names to instances (for SpawnOn).</summary>
+    private static readonly Dictionary<string, SqScheduler> _registry = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly string _name;
     private readonly int _schedulerId;
     private readonly Queue<SqFiber> _readyQueue = new();
@@ -20,6 +24,9 @@ public class SqScheduler : ISqScheduler
     private readonly List<SqFiber> _completedFibers = new();
     private SqFiber? _activeFiber;
     private readonly Stopwatch _stopwatch = new();
+
+    // Pending timeout handles: (newHandle, expiryTime, sourceHandle)
+    private readonly List<(ScriptHandle handle, double expiry, ScriptHandle source)> _pendingTimeouts = new();
 
     // Command registries (injected by host for spawned scripts)
     public Dictionary<string, Func<SqValue>>? NularCommands { get; set; }
@@ -53,7 +60,12 @@ public class SqScheduler : ISqScheduler
     {
         _name = name;
         _schedulerId = _nextSchedulerId++;
+        _registry[name] = this;
     }
+
+    /// <summary>Look up a scheduler by name from the global registry.</summary>
+    public static SqScheduler? Find(string name) =>
+        _registry.TryGetValue(name, out var s) ? s : null;
 
     /// <summary>
     /// Spawn a new fiber from a bytecode chunk.
@@ -96,8 +108,6 @@ public class SqScheduler : ISqScheduler
         if (_activeFiber != null) { _activeFiber.State = FiberState.Ready; _readyQueue.Enqueue(_activeFiber); }
     }
 
-    void ISqScheduler.Print(string message) => Console.WriteLine(message);
-
     /// <summary>
     /// Execute one tick of the scheduler. Runs fibers until time budget is exhausted
     /// or no more ready fibers exist.
@@ -112,6 +122,8 @@ public class SqScheduler : ISqScheduler
 
         // Wake up fibers whose wait time has passed
         WakeWaitingFibers();
+        // Process expired timeouts
+        ProcessTimeouts();
         _stopwatch.Restart(); // don't count wake-up time
 
         while (_readyQueue.Count > 0 && elapsedMs < TimeBudgetMs)
@@ -177,14 +189,121 @@ public class SqScheduler : ISqScheduler
         }
     }
 
-    /// <summary>
-    /// Terminate a fiber by its handle.
-    /// </summary>
-    public void Terminate(SqFiber fiber, SqValue? result = null)
+    object ISqScheduler.SpawnOn(string schedulerName, BytecodeChunk chunk, string name, SqValue[]? args)
     {
-        fiber.State = FiberState.Terminated;
-        fiber.Handle.Resolve(result);
-        _completedFibers.Add(fiber);
+        var target = Find(schedulerName);
+        if (target == null)
+            throw new InvalidOperationException($"Scheduler '{schedulerName}' not found. Available: {string.Join(", ", _registry.Keys)}");
+
+        var globals = new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase);
+        var vm = new SqVm(chunk, globals, target);
+        if (target.NularCommands != null)
+            foreach (var kv in target.NularCommands) vm.RegisterNular(kv.Key, kv.Value);
+        if (target.UnaryCommands != null)
+            foreach (var kv in target.UnaryCommands) vm.RegisterUnary(kv.Key, kv.Value);
+        if (target.BinaryCommands != null)
+            foreach (var kv in target.BinaryCommands) vm.RegisterBinary(kv.Key, kv.Value);
+        if (args != null && args.Length > 0) vm.SetLocal(0, args[0]);
+        var fiber = new SqFiber(name, vm, target, target.CurrentTime);
+        target._readyQueue.Enqueue(fiber);
+        target.TotalFibersCreated++;
+        return fiber.Handle;
+    }
+
+    void ISqScheduler.AwaitHandle(object handleObj, double timeoutSeconds)
+    {
+        if (_activeFiber == null) return;
+        var handle = (ScriptHandle)handleObj;
+
+        if (handle.IsResolved)
+        {
+            // Already resolved — push value and continue
+            _activeFiber.State = FiberState.Ready;
+            _readyQueue.Enqueue(_activeFiber);
+            return;
+        }
+
+        // Mark fiber as waiting on this handle
+        _activeFiber.State = FiberState.Waiting;
+        _activeFiber.WaitUntil = timeoutSeconds < double.PositiveInfinity
+            ? CurrentTime + timeoutSeconds
+            : double.PositiveInfinity;
+
+        _waitingFibers.Add(_activeFiber);
+
+        // When handle resolves, wake the fiber
+        handle.OnResolved += _ =>
+        {
+            if (_activeFiber != null && _activeFiber.State == FiberState.Waiting)
+            {
+                _activeFiber.State = FiberState.Ready;
+                _readyQueue.Enqueue(_activeFiber);
+                _waitingFibers.Remove(_activeFiber);
+            }
+        };
+    }
+
+    void ISqScheduler.TerminateHandle(object handleObj, SqValue? result)
+    {
+        var handle = (ScriptHandle)handleObj;
+        handle.Resolve(result);
+    }
+
+    bool ISqScheduler.IsHandleResolved(object handleObj)
+    {
+        return ((ScriptHandle)handleObj).IsResolved;
+    }
+
+    object ISqScheduler.ScheduleTimeout(object handleObj, double timeoutSeconds)
+    {
+        var source = (ScriptHandle)handleObj;
+
+        // If source already resolved, return it directly
+        if (source.IsResolved)
+            return source;
+
+        // Create new standalone handle that races source vs timer
+        var timeoutHandle = new ScriptHandle();
+        bool done = false;
+
+        // When source resolves first, resolve timeout handle with source value
+        source.OnResolved += val =>
+        {
+            if (!done)
+            {
+                done = true;
+                timeoutHandle.Resolve(val);
+            }
+        };
+
+        // Track for timer expiry
+        _pendingTimeouts.Add((timeoutHandle, CurrentTime + timeoutSeconds, source));
+
+        return timeoutHandle;
+    }
+
+    void ISqScheduler.Print(string message) => Console.WriteLine(message);
+
+    // --- Timeout processing ---
+
+    private void ProcessTimeouts()
+    {
+        if (_pendingTimeouts.Count == 0) return;
+        double now = CurrentTime;
+
+        for (int i = _pendingTimeouts.Count - 1; i >= 0; i--)
+        {
+            var (handle, expiry, source) = _pendingTimeouts[i];
+            if (now >= expiry)
+            {
+                // Timer expired — resolve with nil if not already resolved
+                if (!handle.IsResolved)
+                {
+                    handle.Resolve(SqValue.Nil);
+                }
+                _pendingTimeouts.RemoveAt(i);
+            }
+        }
     }
 
     // --- Internal ---

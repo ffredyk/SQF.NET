@@ -250,6 +250,38 @@ public sealed class ForFromToNode : AstNode
     }
 }
 
+public sealed class SwitchDoNode : AstNode
+{
+    /// <summary>The value being switched on.</summary>
+    public AstNode Value { get; }
+
+    /// <summary>List of (caseValue, body) pairs. caseValue may be null for default.</summary>
+    public List<SwitchCase> Cases { get; }
+
+    public SwitchDoNode(AstNode value, List<SwitchCase> cases, int line, int col)
+        : base(AstNodeType.SwitchDo, line, col)
+    {
+        Value = value;
+        Cases = cases;
+    }
+}
+
+/// <summary>A single case or default within a switch block.</summary>
+public sealed class SwitchCase
+{
+    /// <summary>The value to match against. Null means 'default'.</summary>
+    public AstNode? CaseValue { get; }
+
+    /// <summary>The body to execute if this case matches.</summary>
+    public AstNode Body { get; }
+
+    public SwitchCase(AstNode? caseValue, AstNode body)
+    {
+        CaseValue = caseValue;
+        Body = body;
+    }
+}
+
 // --- Execution ---
 
 public sealed class CallNode : AstNode

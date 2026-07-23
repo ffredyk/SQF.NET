@@ -27,8 +27,6 @@ public enum OpCode : byte
     Dup,
     Pop,
     Swap,
-    SpawnOn,
-    Await,
     Throw,
     TryBegin,
     TryEnd,

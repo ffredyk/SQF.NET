@@ -99,6 +99,9 @@ public class ScriptHandle
     public bool IsResolved => _resolved || (_fiber?.State == FiberState.Completed);
     public event Action<SqValue?>? OnResolved;
 
+    /// <summary>The resolved value, or null if not yet resolved.</summary>
+    public SqValue? ResolvedValue => GetResult();
+
     internal ScriptHandle(SqFiber? fiber = null)
     {
         _fiber = fiber;

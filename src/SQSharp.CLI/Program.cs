@@ -94,7 +94,7 @@ class Program
 
     static int CompileFile(string[] args)
     {
-        if (args.Length < 2) { Console.Error.WriteLine("Usage: sqf compile <file>"); return 1; }
+        if (args.Length < 2) { Console.Error.WriteLine("Usage: sqf compile <file> [--binary] [-o <output>]"); return 1; }
         string source = File.ReadAllText(args[1]);
         var lexer = new Lexer(source);
         var tokens = lexer.Tokenize();
@@ -102,9 +102,26 @@ class Program
         var ast = parser.Parse();
         var compiler = new SQSharp.Compiler.Compiler();
         var chunk = compiler.Compile(ast, args[1]);
-        Console.WriteLine($"Compiled {args[1]}: {chunk.Instructions.Count} instructions, {chunk.Constants.Count} constants, {chunk.LocalCount} locals");
-        foreach (var inst in chunk.Instructions)
-            Console.WriteLine($"  {inst}");
+
+        bool binary = args.Any(a => a == "--binary" || a == "-b");
+        string? outFile = null;
+        int oIdx = Array.IndexOf(args, "-o");
+        if (oIdx >= 0 && oIdx + 1 < args.Length) outFile = args[oIdx + 1];
+
+        if (binary)
+        {
+            string outputPath = outFile ?? Path.ChangeExtension(args[1], ".sqfc");
+            using var stream = File.Create(outputPath);
+            var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8);
+            SqBinarySerializer.WriteChunk(writer, chunk);
+            Console.WriteLine($"Binary compiled: {outputPath} ({chunk.Instructions.Count} instrs, {chunk.Constants.Count} consts, {chunk.LocalCount} locals, {chunk.Children.Count} children)");
+        }
+        else
+        {
+            Console.WriteLine($"Compiled {args[1]}: {chunk.Instructions.Count} instructions, {chunk.Constants.Count} constants, {chunk.LocalCount} locals");
+            foreach (var inst in chunk.Instructions)
+                Console.WriteLine($"  {inst}");
+        }
         return 0;
     }
 
@@ -178,6 +195,33 @@ class Program
                 Console.WriteLine($"{indent}While:");
                 PrintAst(w.Condition, indent + "  Cond: ");
                 PrintAst(w.Body, indent + "  Do: ");
+                break;
+            case SwitchDoNode sw:
+                Console.WriteLine($"{indent}Switch:");
+                PrintAst(sw.Value, indent + "  Val: ");
+                foreach (var c in sw.Cases)
+                {
+                    if (c.CaseValue != null)
+                    {
+                        Console.WriteLine($"{indent}  Case:");
+                        PrintAst(c.CaseValue, indent + "    Val: ");
+                    }
+                    else
+                        Console.WriteLine($"{indent}  Default:");
+                    PrintAst(c.Body, indent + "    Body: ");
+                }
+                break;
+            case ForDoNode fd:
+                Console.WriteLine($"{indent}ForDo:");
+                PrintAst(fd.Init, indent + "  Init: ");
+                PrintAst(fd.Condition, indent + "  Cond: ");
+                PrintAst(fd.Step, indent + "  Step: ");
+                PrintAst(fd.Body, indent + "  Body: ");
+                break;
+            case ReturnNode r:
+                Console.Write($"{indent}Return");
+                if (r.Value != null) { Console.WriteLine(":"); PrintAst(r.Value, indent + "  "); }
+                else Console.WriteLine();
                 break;
             default: Console.WriteLine($"{indent}{node.NodeType}"); break;
         }
