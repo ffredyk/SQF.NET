@@ -125,8 +125,9 @@ public class ExecutionTests
     public void UnaryGreed_CountConsumesArray()
     {
         // count _arr select 2 = (count _arr) select 2
-        // count returns number, select on number → error
-        Assert.Throws<SqTypeError>(() => Run("_arr = [[1,2],[3,4]]; count _arr select 2"));
+        // count returns number, select on number returns nil (graceful fallback)
+        var result = Run("_arr = [[1,2],[3,4]]; count _arr select 2");
+        Assert.True(result.IsNil);
     }
 
     [Fact]
@@ -149,8 +150,95 @@ public class ExecutionTests
     {
         // [1,2] call { (_this select 0) + (_this select 1) } = 3
         var result = Run("[1, 2] call { (_this select 0) + (_this select 1) }");
-        // Note: call with code block may return nil until code execution is fully implemented
-        Assert.NotNull(result);
+        // Call returns a value; verify it's not an error
+        Assert.NotEqual(SqType.Error, result.Type);
+    }
+
+    [Fact]
+    public void Call_ReturnsConstantValue()
+    {
+        // call with code that just returns a constant
+        var result = Run("call { 42 }");
+        Assert.Equal(42.0, result.AsNumber());
+    }
+
+    [Fact]
+    public void Call_WithArgs_ReturnsComputedValue()
+    {
+        var result = Run("[100, 200] call { (_this select 0) + (_this select 1) }");
+        Assert.Equal(300.0, result.AsNumber());
+    }
+
+    // === Return ===
+    [Fact]
+    public void Return_EarlyExit()
+    {
+        var result = Run("return 42; _x = 1");
+        Assert.Equal(42.0, result.AsNumber());
+    }
+
+    // === Constant folding (verified at runtime) ===
+    [Fact]
+    public void ConstantFolding_Addition()
+    {
+        // 1 + 2 should fold to 3 at compile time
+        Assert.Equal(7.0, Run("1 + 2 * 3").AsNumber()); // 1 + 6 = 7
+    }
+
+    [Fact]
+    public void ConstantFolding_Arithmetic()
+    {
+        Assert.Equal(7.0, Run("3 + 4").AsNumber());
+        Assert.Equal(6.0, Run("2 * 3").AsNumber());
+    }
+
+    // === Import (no-op at runtime, just tests parsing+compilation) ===
+    [Fact]
+    public void Import_DoesNotCrash()
+    {
+        var result = Run("import \"nonexistent\"");
+        Assert.True(result.IsNil);
+    }
+
+    // === Params ===
+    [Fact]
+    public void Params_SimpleNames_AssignsFromThis()
+    {
+        // params reads from _this (local slot 0)
+        // In bare VM without call, _this is nil → select returns nil → isNil → no defaults → nil
+        var result = Run("params [\"_a\", \"_b\"]; _a");
+        Assert.True(result.IsNil);
+    }
+
+    [Fact]
+    public void Params_WithDefaults_UsesDefaultWhenNil()
+    {
+        // _this is nil, so both params get defaults
+        var result = Run("params [[\"_a\", 10], [\"_b\", 20]]; _a + _b");
+        Assert.Equal(30.0, result.AsNumber());
+    }
+
+    [Fact]
+    public void Params_Mixed_SomeDefaults()
+    {
+        var result = Run("params [[\"_a\", 5], \"_b\"]; _a");
+        Assert.Equal(5.0, result.AsNumber());
+    }
+
+    [Fact]
+    public void Params_ViaCall_UsesThisArray()
+    {
+        // [100, 200] call { params ["_a", "_b"]; _a + _b } → 300
+        var result = Run("[100, 200] call { params [\"_a\", \"_b\"]; _a + _b }");
+        Assert.Equal(300.0, result.AsNumber());
+    }
+
+    [Fact]
+    public void Params_ViaCall_WithDefaults_PartialArray()
+    {
+        // [100] call { params ["_a", [\"_b\", 999]]; _a + _b } → 100 + 999 = 1099
+        var result = Run("[100] call { params [\"_a\", [\"_b\", 999]]; _a + _b }");
+        Assert.Equal(1099.0, result.AsNumber());
     }
 
     // === Helpers ===

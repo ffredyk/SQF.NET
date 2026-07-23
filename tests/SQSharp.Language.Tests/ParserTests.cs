@@ -224,12 +224,11 @@ public class ParserTests
     [Fact]
     public void Call_WithArgs()
     {
-        // [1,2] call {code} — args on left, call is binary operator
+        // [1,2] call {code} — args on left, call is infix → CallNode (not BinaryCallNode)
         var ast = Parse("[1, 2] call { (_this select 0) + (_this select 1) }");
-        var bin = Assert.IsType<BinaryCallNode>(ast);
-        Assert.Equal("call", bin.Operator);
-        Assert.IsType<ArrayExprNode>(bin.Left);
-        Assert.IsType<CodeLiteralNode>(bin.Right);
+        var call = Assert.IsType<CallNode>(ast);
+        Assert.IsType<ArrayExprNode>(call.Arguments);
+        Assert.IsType<CodeLiteralNode>(call.Code);
     }
 
     [Fact]
@@ -243,11 +242,10 @@ public class ParserTests
     [Fact]
     public void Spawn_WithArgs()
     {
-        // 0 spawn {code} — args on left, spawn is binary operator
+        // 0 spawn {code} — args on left, spawn is infix → SpawnNode (not BinaryCallNode)
         var ast = Parse("0 spawn { hint \"done\" }");
-        var bin = Assert.IsType<BinaryCallNode>(ast);
-        Assert.Equal("spawn", bin.Operator);
-        Assert.IsType<CodeLiteralNode>(bin.Right);
+        var spawn = Assert.IsType<SpawnNode>(ast);
+        Assert.IsType<CodeLiteralNode>(spawn.Code);
     }
 
     [Fact]
@@ -256,6 +254,99 @@ public class ParserTests
         // spawn {code} — no args, spawn is prefix keyword → SpawnNode
         var ast = Parse("spawn { hint \"done\" }");
         Assert.IsType<SpawnNode>(ast);
+    }
+
+    // === Switch / Case / Default ===
+    [Fact]
+    public void SwitchDo_Parses()
+    {
+        var ast = Parse("switch (_x) do { case 1: { 10 }; default { 0 }; }");
+        var sw = Assert.IsType<SwitchDoNode>(ast);
+        Assert.Equal(2, sw.Cases.Count);
+    }
+
+    [Fact]
+    public void SwitchDo_WithMultipleCases()
+    {
+        var ast = Parse("switch (_val) do { case 1: { \"one\" }; case 2: { \"two\" }; default { \"other\" } }");
+        var sw = Assert.IsType<SwitchDoNode>(ast);
+        Assert.Equal(3, sw.Cases.Count);
+        Assert.Null(sw.Cases[2].CaseValue); // default has null case value
+    }
+
+    // === Return ===
+    [Fact]
+    public void Return_WithValue()
+    {
+        var ast = Parse("return 42");
+        var ret = Assert.IsType<ReturnNode>(ast);
+        Assert.NotNull(ret.Value);
+        Assert.IsType<NumberLiteralNode>(ret.Value);
+    }
+
+    [Fact]
+    public void Return_WithoutValue()
+    {
+        var ast = Parse("return; _x = 1");
+        var seq = Assert.IsType<SequenceNode>(ast);
+        var ret = Assert.IsType<ReturnNode>(seq.Expressions[0]);
+        Assert.Null(ret.Value);
+    }
+
+    // === SpawnOn (correct arity: array on right) ===
+    [Fact]
+    public void SpawnOn_Unary_ArrayRight()
+    {
+        // spawnOn ["AI", { _x = 1 }] — unary, right = array
+        var ast = Parse("spawnOn [\"AI\", { _x = 1 }]");
+        var unary = Assert.IsType<UnaryCallNode>(ast);
+        Assert.Equal("spawnOn", unary.Operator);
+        Assert.IsType<ArrayExprNode>(unary.Operand);
+    }
+
+    [Fact]
+    public void SpawnOn_Binary_ArrayRight()
+    {
+        // _args spawnOn ["AI", { params ["_x"]; _x + 1 }]
+        var ast = Parse("_args spawnOn [\"AI\", { params [\"_x\"]; _x + 1 }]");
+        var bin = Assert.IsType<BinaryCallNode>(ast);
+        Assert.Equal("spawnOn", bin.Operator);
+        Assert.IsType<VariableNode>(bin.Left);
+        Assert.IsType<ArrayExprNode>(bin.Right);
+    }
+
+    // === Await (correct arity: unary, one right expression) ===
+    [Fact]
+    public void Await_Unary_Handle()
+    {
+        // await _handle — unary, right = handle variable
+        var ast = Parse("await _handle");
+        var unary = Assert.IsType<UnaryCallNode>(ast);
+        Assert.Equal("await", unary.Operator);
+        Assert.IsType<VariableNode>(unary.Operand);
+    }
+
+    // === Timeout (binary: handle timeout seconds) ===
+    [Fact]
+    public void Timeout_Binary_RacesHandle()
+    {
+        // _handle timeout 5 — binary, left=handle, right=seconds
+        var ast = Parse("_handle timeout 5");
+        var bin = Assert.IsType<BinaryCallNode>(ast);
+        Assert.Equal("timeout", bin.Operator);
+        Assert.IsType<VariableNode>(bin.Left);
+        Assert.IsType<NumberLiteralNode>(bin.Right);
+    }
+
+    [Fact]
+    public void Await_WithTimeout_Combined()
+    {
+        // await (_handle timeout 5) — await receives the result of timeout
+        var ast = Parse("await (_handle timeout 5)");
+        var unary = Assert.IsType<UnaryCallNode>(ast);
+        Assert.Equal("await", unary.Operator);
+        var bin = Assert.IsType<BinaryCallNode>(unary.Operand);
+        Assert.Equal("timeout", bin.Operator);
     }
 
     // === Helpers ===
