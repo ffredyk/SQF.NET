@@ -517,6 +517,7 @@ Some SQF features are deliberately omitted or changed:
 ## Getting Started
 
 - **SQF scripter?** → [for-sqf-scripters.md](for-sqf-scripters.md)
+- **Syntax sugar?** → [syntax-sugar.md](syntax-sugar.md)
 - **C# developer?** → [for-dotnet-devs.md](for-dotnet-devs.md)
 - **Language reference?** → [language-spec.md](language-spec.md)
 - **Quick reference?** → [quick-reference.md](quick-reference.md)

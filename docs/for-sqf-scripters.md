@@ -339,3 +339,7 @@ _myVar, _x1, TAG_Global, _camelCase, _přežral (Unicode OK in SQ#)
 | Type annotations | None | Optional `: type` |
 | Array bracket access | `_arr select 0` | `_arr[0]` (`select` still works) |
 | Regular expressions | None | `_str =~ /pattern/` |
+
+---
+
+📖 See [syntax-sugar.md](syntax-sugar.md) for full list of optional cleaner syntax.
