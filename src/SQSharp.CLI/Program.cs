@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using SQSharp.Core;
 using SQSharp.Language;
 using SQSharp.Compiler;
@@ -83,18 +85,34 @@ class Program
         host.OnPrint += msg => Console.WriteLine(msg);
 
         // Pre-create benchmark schedulers for spawnOn parallelism tests
-        host.CreateScheduler("B_1");
-        host.CreateScheduler("B_2");
-        host.CreateScheduler("B_3");
-        host.CreateScheduler("B_4");
+        var b1 = host.CreateScheduler("B_1");
+        var b2 = host.CreateScheduler("B_2");
+        var b3 = host.CreateScheduler("B_3");
+        var b4 = host.CreateScheduler("B_4");
+
+        // Start all non-main schedulers on background threads
+        b1.Start();
+        b2.Start();
+        b3.Start();
+        b4.Start();
+        host.MainScheduler.Start();
 
         var fiber = host.ExecuteString(source, Path.GetFileName(args[1]));
-        // Pump scheduler until fiber completes
+
+        // Wait for main fiber to complete (background threads keep ticking)
         while (fiber.State != SQSharp.Scheduler.FiberState.Completed
             && fiber.State != SQSharp.Scheduler.FiberState.Terminated)
         {
-            host.Tick();
+            Thread.Sleep(1);
         }
+
+        // Stop all background threads
+        host.MainScheduler.Stop();
+        b1.Stop();
+        b2.Stop();
+        b3.Stop();
+        b4.Stop();
+
         Console.WriteLine($"Result: {fiber.Result}");
         return 0;
     }

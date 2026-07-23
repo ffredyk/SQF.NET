@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using SQSharp.Core;
 using SQSharp.VM;
 
@@ -10,20 +13,28 @@ namespace SQSharp.Scheduler;
 /// Cooperative scheduler that manages fibers with a time budget per tick.
 /// Multiple schedulers can run on different threads.
 /// </summary>
-public class SqScheduler : ISqScheduler
+public class SqScheduler : ISqScheduler, IDisposable
 {
     private static int _nextSchedulerId = 1;
 
     /// <summary>Global registry mapping scheduler names to instances (for SpawnOn).</summary>
-    private static readonly Dictionary<string, SqScheduler> _registry = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, SqScheduler> _registry = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _name;
     private readonly int _schedulerId;
-    private readonly Queue<SqFiber> _readyQueue = new();
+    private readonly ConcurrentQueue<SqFiber> _readyQueue = new();
     private readonly List<SqFiber> _waitingFibers = new();
+    private readonly object _waitingLock = new();
     private readonly List<SqFiber> _completedFibers = new();
     private SqFiber? _activeFiber;
-    private readonly Stopwatch _stopwatch = new();
+    private readonly Stopwatch _tickStopwatch = new();
+    private readonly Stopwatch _wallClock = Stopwatch.StartNew();
+    private int _totalFibersCreated;
+
+    // Background thread
+    private Thread? _thread;
+    private CancellationTokenSource? _cts;
+    private volatile bool _disposed;
 
     // Pending timeout handles: (newHandle, expiryTime, sourceHandle)
     private readonly List<(ScriptHandle handle, double expiry, ScriptHandle source)> _pendingTimeouts = new();
@@ -46,17 +57,17 @@ public class SqScheduler : ISqScheduler
 
     int ISqScheduler.MaxIterations => MaxIterations;
 
-    /// <summary>Current scheduler time in seconds.</summary>
-    public double CurrentTime => _stopwatch.Elapsed.TotalSeconds;
+    /// <summary>Current scheduler time in seconds (monotonic wall clock).</summary>
+    public double CurrentTime => _wallClock.Elapsed.TotalSeconds;
 
     /// <summary>Total number of fibers created by this scheduler.</summary>
-    public int TotalFibersCreated { get; private set; }
+    public int TotalFibersCreated => _totalFibersCreated;
 
     /// <summary>Number of fibers currently ready to run.</summary>
     public int ReadyCount => _readyQueue.Count;
 
     /// <summary>Number of fibers currently waiting.</summary>
-    public int WaitingCount => _waitingFibers.Count;
+    public int WaitingCount { get { lock (_waitingLock) { return _waitingFibers.Count; } } }
 
     /// <summary>Is the scheduler currently executing a tick?</summary>
     public bool IsRunning { get; private set; }
@@ -66,6 +77,67 @@ public class SqScheduler : ISqScheduler
         _name = name;
         _schedulerId = _nextSchedulerId++;
         _registry[name] = this;
+    }
+
+    /// <summary>
+    /// Start a background thread that continuously ticks this scheduler.
+    /// </summary>
+    public void Start()
+    {
+        if (_thread != null) return;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        _thread = new Thread(() =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                Tick();
+                if (_readyQueue.IsEmpty)
+                    Thread.Sleep(1);
+                else
+                    Thread.Yield();
+            }
+        })
+        {
+            Name = $"SQ#-{_name}",
+            IsBackground = true
+        };
+        _thread.Start();
+    }
+
+    /// <summary>
+    /// Stop the background thread and wait for it to finish.
+    /// </summary>
+    public void Stop()
+    {
+        if (_thread == null) return;
+        _cts?.Cancel();
+        _thread.Join(5000);
+        _thread = null;
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    /// <summary>
+    /// Wait until all fibers on this scheduler have completed.
+    /// </summary>
+    public void WaitForCompletion(int pollMs = 10)
+    {
+        while (true)
+        {
+            bool hasWork;
+            lock (_waitingLock) { hasWork = _waitingFibers.Count > 0; }
+            if (!hasWork && _readyQueue.IsEmpty && _activeFiber == null)
+                break;
+            Thread.Sleep(pollMs);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Stop();
     }
 
     /// <summary>Look up a scheduler by name from the global registry.</summary>
@@ -81,7 +153,7 @@ public class SqScheduler : ISqScheduler
         var vm = new SqVm(chunk, globals ?? new Dictionary<string, SqValue>(StringComparer.OrdinalIgnoreCase), this);
         var fiber = new SqFiber(name, vm, this, CurrentTime);
         _readyQueue.Enqueue(fiber);
-        TotalFibersCreated++;
+        Interlocked.Increment(ref _totalFibersCreated);
         return fiber;
     }
 
@@ -101,18 +173,26 @@ public class SqScheduler : ISqScheduler
         if (args != null && args.Length > 0) vm.SetLocal(0, args[0]);
         var fiber = new SqFiber(name, vm, this, CurrentTime);
         _readyQueue.Enqueue(fiber);
-        TotalFibersCreated++;
+        Interlocked.Increment(ref _totalFibersCreated);
         return fiber.Handle;
     }
 
     void ISqScheduler.SleepCurrent(double seconds)
     {
-        if (_activeFiber != null) { _activeFiber.Sleep(seconds); _waitingFibers.Add(_activeFiber); }
+        if (_activeFiber != null)
+        {
+            _activeFiber.Sleep(seconds);
+            lock (_waitingLock) { _waitingFibers.Add(_activeFiber); }
+        }
     }
 
     void ISqScheduler.YieldCurrent()
     {
-        if (_activeFiber != null) { _activeFiber.State = FiberState.Ready; _readyQueue.Enqueue(_activeFiber); }
+        if (_activeFiber != null)
+        {
+            _activeFiber.State = FiberState.Ready;
+            _readyQueue.Enqueue(_activeFiber);
+        }
     }
 
     /// <summary>
@@ -121,21 +201,18 @@ public class SqScheduler : ISqScheduler
     /// </summary>
     public void Tick()
     {
-        if (IsRunning) return; // Prevent re-entry
+        if (IsRunning) return;
         IsRunning = true;
 
         double elapsedMs = 0;
-        _stopwatch.Restart();
+        _tickStopwatch.Restart();
 
-        // Wake up fibers whose wait time has passed
         WakeWaitingFibers();
-        // Process expired timeouts
         ProcessTimeouts();
-        _stopwatch.Restart(); // don't count wake-up time
+        _tickStopwatch.Restart();
 
-        while (_readyQueue.Count > 0 && elapsedMs < TimeBudgetMs)
+        while (elapsedMs < TimeBudgetMs && _readyQueue.TryDequeue(out var fiber))
         {
-            var fiber = _readyQueue.Dequeue();
             _activeFiber = fiber;
             fiber.State = FiberState.Running;
 
@@ -151,7 +228,7 @@ public class SqScheduler : ISqScheduler
                 }
                 else if (vmState == VmState.Yielded && fiber.WaitUntil > 0)
                 {
-                    // Already added to waiting by SleepCurrent — do nothing
+                    // Already added to waiting by SleepCurrent/AwaitHandle — do nothing
                 }
                 else
                 {
@@ -166,7 +243,7 @@ public class SqScheduler : ISqScheduler
             }
 
             _activeFiber = null;
-            elapsedMs = _stopwatch.Elapsed.TotalMilliseconds;
+            elapsedMs = _tickStopwatch.Elapsed.TotalMilliseconds;
         }
 
         IsRunning = false;
@@ -215,7 +292,7 @@ public class SqScheduler : ISqScheduler
         if (args != null && args.Length > 0) vm.SetLocal(0, args[0]);
         var fiber = new SqFiber(name, vm, target, target.CurrentTime);
         target._readyQueue.Enqueue(fiber);
-        target.TotalFibersCreated++;
+        Interlocked.Increment(ref target._totalFibersCreated);
         return fiber.Handle;
     }
 
@@ -226,31 +303,28 @@ public class SqScheduler : ISqScheduler
 
         if (handle.IsResolved)
         {
-            // Already resolved — re-enqueue and continue
             _activeFiber.State = FiberState.Ready;
             _readyQueue.Enqueue(_activeFiber);
             return;
         }
 
-        // Capture fiber now — _activeFiber changes when other fibers run
         var fiber = _activeFiber;
 
-        // Mark fiber as waiting on this handle
         fiber.State = FiberState.Waiting;
         fiber.WaitUntil = timeoutSeconds < double.PositiveInfinity
             ? CurrentTime + timeoutSeconds
             : double.PositiveInfinity;
 
-        _waitingFibers.Add(fiber);
+        lock (_waitingLock) { _waitingFibers.Add(fiber); }
 
-        // When handle resolves, wake the fiber
+        // When handle resolves, wake the fiber (may fire on another thread)
         handle.OnResolved += _ =>
         {
             if (fiber.State == FiberState.Waiting)
             {
                 fiber.State = FiberState.Ready;
                 _readyQueue.Enqueue(fiber);
-                _waitingFibers.Remove(fiber);
+                lock (_waitingLock) { _waitingFibers.Remove(fiber); }
             }
         };
     }
@@ -327,14 +401,17 @@ public class SqScheduler : ISqScheduler
     private void WakeWaitingFibers()
     {
         double now = CurrentTime;
-        for (int i = _waitingFibers.Count - 1; i >= 0; i--)
+        lock (_waitingLock)
         {
-            var fiber = _waitingFibers[i];
-            if (fiber.WaitUntil <= now)
+            for (int i = _waitingFibers.Count - 1; i >= 0; i--)
             {
-                fiber.State = FiberState.Ready;
-                _readyQueue.Enqueue(fiber);
-                _waitingFibers.RemoveAt(i);
+                var fiber = _waitingFibers[i];
+                if (fiber.WaitUntil <= now)
+                {
+                    fiber.State = FiberState.Ready;
+                    _readyQueue.Enqueue(fiber);
+                    _waitingFibers.RemoveAt(i);
+                }
             }
         }
     }
